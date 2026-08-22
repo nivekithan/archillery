@@ -51,14 +51,46 @@ app.all("/:username/:repo/*", async (c) => {
   if (!repository) {
     return c.notFound();
   }
+  const repoKey = getRepoKey({ repo, username });
 
-  const container = getContainer(
-    c.env.GIT_CONTAINER,
-    `${username}/${repository}`,
-  );
+  const manageDisk = await archil.getDisk(getDiskName({ repoKey }));
+  const repoDiskToken = await getRepoDiskToken({
+    manageDisk,
+    repoKey,
+  });
+
+  if (!repoDiskToken) {
+    /**
+     * Either we are unable to get the file or repo is not created
+     */
+    return new Response("NOT FOUND", { status: 404 });
+  }
+
+  const container = getContainer(c.env.GIT_CONTAINER, repoKey);
 
   return container.fetch(c.req.raw);
 });
+
+async function getRepoDiskToken({
+  manageDisk,
+  repoKey,
+}: {
+  manageDisk: archil.Disk;
+  repoKey: string;
+}) {
+  try {
+    const file = await manageDisk.getObject(repoKey);
+    const token = new TextDecoder().decode(file);
+
+    return token;
+  } catch (err) {
+    /**
+     * Archil throws error when object is not present
+     */
+    console.log(err);
+    return null;
+  }
+}
 
 function getRepoKey({ repo, username }: { repo: string; username: string }) {
   return `${repo}/${username}`;
