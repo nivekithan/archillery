@@ -5,6 +5,8 @@ import { basicAuth } from "hono/basic-auth";
 import * as archil from "disk";
 import z from "zod";
 
+archil.configure({ apiKey: env.ARCHIL_API_KEY, region: env.ARCHIL_REGION });
+
 export class GitContainer extends Container<Cloudflare.Env> {
   defaultPort = 3000;
   sleepAfter = "15m";
@@ -19,9 +21,7 @@ app.use(basicAuth({ password: env.GIT_PASSWORD, username: env.GIT_USERNAME }));
  */
 app.post("/api/repo", async (c) => {
   const body = await c.req.json();
-  const { repo, username } = z
-    .object({ username: z.string(), repo: RepoNameSchema })
-    .parse(body);
+  const { repo, username } = RepoNameSchema.parse(body);
 
   const repoKey = getRepoKey({ repo, username });
 
@@ -45,14 +45,15 @@ app.post("/api/repo", async (c) => {
 app.all("/api/*", () => new Response("NOT FOUND", { status: 404 }));
 
 app.all("/:username/:repo/*", async (c) => {
-  const { repo, username } = z
-    .object({ username: z.string(), repo: RepoNameSchema })
-    .parse({ repo: c.req.param("repo"), username: c.req.param("username") });
+  const { repo, username } = RepoNameSchema.parse({
+    repo: c.req.param("repo"),
+    username: c.req.param("username"),
+  });
 
   const repoKey = getRepoKey({ repo, username });
   const diskName = getDiskName({ repoKey });
 
-  const manageDisk = await archil.getDisk(diskName);
+  const manageDisk = await archil.getDisk(c.env.ARCHIL_META_DISK);
   const repoDiskToken = await getRepoDiskToken({
     manageDisk,
     repoKey,
@@ -70,6 +71,7 @@ app.all("/:username/:repo/*", async (c) => {
   await container.startAndWaitForPorts({
     startOptions: {
       envVars: { ARCHIL_DISK_TOKEN: repoDiskToken, ARCHIL_DISK_NAME: diskName },
+      enableInternet: true,
     },
   });
 
@@ -98,16 +100,29 @@ async function getRepoDiskToken({
 }
 
 function getRepoKey({ repo, username }: { repo: string; username: string }) {
-  return `${username}/${repo}`;
+  return `${username}-${repo}`;
 }
 
 function getDiskName({ repoKey }: { repoKey: string }) {
   return `git-remote-${repoKey}`;
 }
 
-const RepoNameSchema = z
-  .string()
-  .transform((value) => (value.endsWith(".git") ? value.slice(0, -4) : value))
-  .pipe(z.string().min(1));
+const RepoNameSchema = z.object({
+  username: z
+    .string()
+    .nonempty()
+    .max(30)
+    .regex(/^[A-Za-z0-9_]+$/),
+  repo: z
+    .string()
+    .transform((value) => (value.endsWith(".git") ? value.slice(0, -4) : value))
+    .pipe(
+      z
+        .string()
+        .nonempty()
+        .max(30)
+        .regex(/^[A-Za-z0-9_-]+$/),
+    ),
+});
 
 export default app;

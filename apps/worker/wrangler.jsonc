@@ -14,6 +14,7 @@
   "vars": {
     "GIT_USERNAME": "nivekithan",
     "ARCHIL_META_DISK": "git-remote-meta",
+    "ARCHIL_REGION": "aws-us-east-1",
   },
   "secrets": {
     "required": ["GIT_PASSWORD", "ARCHIL_API_KEY"],
