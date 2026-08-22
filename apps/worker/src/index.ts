@@ -68,6 +68,10 @@ app.all("/:username/:repo/*", async (c) => {
 
   const container = getContainer(c.env.GIT_CONTAINER, repoKey);
 
+  await container.startAndWaitForPorts({
+    startOptions: { envVars: { ARCHIL_DISK_TOKEN: repoDiskToken } },
+  });
+
   return container.fetch(c.req.raw);
 });
 
