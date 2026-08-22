@@ -3,66 +3,40 @@
   "name": "git-cloudflare",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-22",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    "head_sampling_rate": 1,
   },
   "placement": {
-    "region": "aws:us-east-1"
+    "region": "aws:us-east-1",
   },
   "vars": {
-    "GIT_USERNAME": "nivekithan"
+    "GIT_USERNAME": "nivekithan",
   },
   "secrets": {
-    "required": ["GIT_PASSWORD"]
+    "required": ["GIT_PASSWORD", "ARCHIL_API_KEY"],
   },
   "containers": [
     {
       "class_name": "GitContainer",
       "image": "../container/Dockerfile",
-      "max_instances": 10
-    }
+      "instance_type": "basic",
+      "max_instances": 10,
+    },
   ],
   "durable_objects": {
     "bindings": [
       {
         "name": "GIT_CONTAINER",
-        "class_name": "GitContainer"
-      }
-    ]
+        "class_name": "GitContainer",
+      },
+    ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["GitContainer"]
-    }
-  ]
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
-  // "ai": {
-  //   "binding": "AI"
-  // },
+      "new_sqlite_classes": ["GitContainer"],
+    },
+  ],
 }
