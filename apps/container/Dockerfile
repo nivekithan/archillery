@@ -5,7 +5,7 @@ FROM debian:bookworm-slim
 ARG ARCHIL_CLIENT_VERSION=0.8.30-1786758716
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends apache2 ca-certificates curl git tini \
+    && apt-get install -y --no-install-recommends apache2 ca-certificates cgit curl git tini \
     && a2enmod cgi rewrite \
     && ARCHIL_CLIENT_VERSION="$ARCHIL_CLIENT_VERSION" ARCHIL_SKIP_IAM_CHECK=1 \
        sh -c 'curl -fsSL https://archil.com/install | sh' \

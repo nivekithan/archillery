@@ -4,6 +4,8 @@ set -eu
 : "${ARCHIL_DISK_ID:?ARCHIL_DISK_ID is required}"
 : "${ARCHIL_MOUNT_TOKEN:?ARCHIL_MOUNT_TOKEN is required}"
 : "${ARCHIL_REGION:?ARCHIL_REGION is required}"
+: "${REPO_NAME:?REPO_NAME is required}"
+: "${REPO_USERNAME:?REPO_USERNAME is required}"
 
 repository=/var/lib/git/repository.git
 mounted=false
@@ -53,6 +55,28 @@ chown -R www-data:www-data /var/lib/git
 runuser -u www-data -- git -C "$repository" config core.fsync all
 runuser -u www-data -- git -C "$repository" config core.fsyncMethod fsync
 runuser -u www-data -- git -C "$repository" config http.receivepack true
+
+cat > /etc/cgitrc <<EOF
+virtual-root=/$REPO_USERNAME/
+css=/$REPO_USERNAME/$REPO_NAME/cgit.css
+logo=/$REPO_USERNAME/$REPO_NAME/cgit.png
+favicon=/$REPO_USERNAME/$REPO_NAME/favicon.ico
+enable-http-clone=0
+enable-index-owner=0
+enable-commit-graph=1
+enable-log-filecount=1
+enable-log-linecount=1
+max-blob-size=1024
+robots=noindex, nofollow
+root-title=$REPO_USERNAME Git repositories
+root-desc=
+repo.url=$REPO_NAME
+repo.path=$repository
+repo.name=$REPO_NAME
+repo.owner=$REPO_USERNAME
+repo.clone-url=/$REPO_USERNAME/$REPO_NAME.git
+repo.readme=:README.md
+EOF
 
 set +u
 . /etc/apache2/envvars

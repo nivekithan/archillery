@@ -14,7 +14,15 @@ export class GitContainer extends Container<Cloudflare.Env> {
 
 const app = new Hono<{ Bindings: Cloudflare.Env }>();
 
-app.use(basicAuth({ password: env.GIT_PASSWORD, username: env.GIT_USERNAME }));
+const requireAuth = basicAuth({
+  password: env.GIT_PASSWORD,
+  username: env.GIT_USERNAME,
+});
+
+app.use((c, next) => {
+  if (isPublicRead(c.req.raw)) return next();
+  return requireAuth(c, next);
+});
 
 /**
  * Create a empty repo
@@ -47,6 +55,8 @@ app.post("/api/repo", async (c) => {
 
 app.all("/api/*", () => new Response("NOT FOUND", { status: 404 }));
 
+app.all("/:username/:repo", (c) => c.redirect(`${c.req.path}/`, 308));
+
 app.all("/:username/:repo/*", async (c) => {
   const { repo, username } = RepoNameSchema.parse({
     repo: c.req.param("repo"),
@@ -75,6 +85,8 @@ app.all("/:username/:repo/*", async (c) => {
         ARCHIL_DISK_ID: repoDisk.diskId,
         ARCHIL_MOUNT_TOKEN: repoDisk.token,
         ARCHIL_REGION: c.env.ARCHIL_REGION,
+        REPO_NAME: repo,
+        REPO_USERNAME: username,
       },
       enableInternet: true,
     },
@@ -110,6 +122,24 @@ function getRepoKey({ repo, username }: { repo: string; username: string }) {
 
 function getDiskName({ repoKey }: { repoKey: string }) {
   return `git-remote-${repoKey}`;
+}
+
+function isPublicRead(request: Request) {
+  const url = new URL(request.url);
+  const service = url.searchParams.get("service");
+
+  if (service === "git-receive-pack" || url.pathname.endsWith("/git-receive-pack")) {
+    return false;
+  }
+
+  if (request.method === "POST") {
+    return url.pathname.endsWith("/git-upload-pack");
+  }
+
+  return (
+    (request.method === "GET" || request.method === "HEAD") &&
+    !url.pathname.startsWith("/api/")
+  );
 }
 
 const RepoNameSchema = z.object({
