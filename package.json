@@ -1,15 +1,14 @@
 {
   "name": "git-cloudflare",
-  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@10.27.0",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
-  },
-  "dependencies": {
-    "hono": "^4.13.3"
+    "build": "turbo run build",
+    "dev": "turbo run dev --ui tui",
+    "deploy": "turbo run deploy",
+    "cf-typegen": "turbo run cf-typegen"
   },
   "devDependencies": {
-    "wrangler": "^4.110.0"
+    "turbo": "^2.10.11"
   }
 }

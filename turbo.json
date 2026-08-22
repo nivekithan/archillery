@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "description": "Build each package after its workspace dependencies",
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "description": "Run package development servers",
+      "cache": false,
+      "persistent": true
+    },
+    "deploy": {
+      "description": "Deploy applications to their runtime platforms",
+      "cache": false
+    },
+    "cf-typegen": {
+      "description": "Generate types from Cloudflare configuration",
+      "cache": false
+    }
+  }
+}
