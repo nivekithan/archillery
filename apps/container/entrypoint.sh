@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-: "${ARCHIL_DISK_NAME:?ARCHIL_DISK_NAME is required}"
+: "${ARCHIL_DISK_ID:?ARCHIL_DISK_ID is required}"
 : "${ARCHIL_MOUNT_TOKEN:?ARCHIL_MOUNT_TOKEN is required}"
 : "${ARCHIL_REGION:?ARCHIL_REGION is required}"
 
@@ -40,25 +40,37 @@ trap 'exit 143' TERM
 trap 'exit 130' INT
 
 mkdir -p /var/lib/git
-archil mount "$ARCHIL_DISK_NAME" /var/lib/git --region "$ARCHIL_REGION"
+echo "Mounting Archil disk"
+archil mount "$ARCHIL_DISK_ID" /var/lib/git --region "$ARCHIL_REGION"
 mounted=true
 
-if [ ! -d "$repository" ]; then
+echo "Preparing Git repository"
+if [ ! -f "$repository/HEAD" ] || [ ! -f "$repository/config" ]; then
   git init --bare --initial-branch=main "$repository"
 fi
 
-git -C "$repository" config core.fsync all
-git -C "$repository" config core.fsyncMethod fsync
-git -C "$repository" config http.receivepack true
 chown -R www-data:www-data /var/lib/git
+runuser -u www-data -- git -C "$repository" config core.fsync all
+runuser -u www-data -- git -C "$repository" config core.fsyncMethod fsync
+runuser -u www-data -- git -C "$repository" config http.receivepack true
 
 set +u
 . /etc/apache2/envvars
 set -u
+echo "Preparing Apache runtime"
+mkdir -p /run/lock
+mkdir -p "$APACHE_RUN_DIR" "$APACHE_LOCK_DIR"
+chown "$APACHE_RUN_USER:$APACHE_RUN_GROUP" "$APACHE_RUN_DIR" "$APACHE_LOCK_DIR"
+apache2ctl configtest
 
-apache2 -D FOREGROUND &
+echo "Starting Apache on port 3000"
+apache2ctl -D FOREGROUND &
 apache_pid=$!
 
 apache_status=0
 wait "$apache_pid" || apache_status=$?
+echo "Apache exited with status $apache_status"
+if [ "$apache_status" -ne 0 ] && [ -r "$APACHE_LOG_DIR/error.log" ]; then
+  cat "$APACHE_LOG_DIR/error.log" >&2
+fi
 exit "$apache_status"

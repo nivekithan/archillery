@@ -37,7 +37,10 @@ app.post("/api/repo", async (c) => {
   /**
    * Who needs a database when you have **DISK**
    */
-  await manageDisk.putObject(repoKey, token);
+  await manageDisk.putObject(
+    repoKey,
+    JSON.stringify({ diskId: repoDisk.disk.id, token }),
+  );
 
   return c.json({ ok: true });
 });
@@ -51,15 +54,13 @@ app.all("/:username/:repo/*", async (c) => {
   });
 
   const repoKey = getRepoKey({ repo, username });
-  const diskName = getDiskName({ repoKey });
-
   const manageDisk = await archil.getDisk(c.env.ARCHIL_META_DISK);
-  const repoDiskToken = await getRepoDiskToken({
+  const repoDisk = await getRepoDisk({
     manageDisk,
     repoKey,
   });
 
-  if (!repoDiskToken) {
+  if (!repoDisk) {
     /**
      * Either we are unable to get the file or repo is not created
      */
@@ -71,8 +72,8 @@ app.all("/:username/:repo/*", async (c) => {
   await container.startAndWaitForPorts({
     startOptions: {
       envVars: {
-        ARCHIL_DISK_NAME: diskName,
-        ARCHIL_MOUNT_TOKEN: repoDiskToken,
+        ARCHIL_DISK_ID: repoDisk.diskId,
+        ARCHIL_MOUNT_TOKEN: repoDisk.token,
         ARCHIL_REGION: c.env.ARCHIL_REGION,
       },
       enableInternet: true,
@@ -82,7 +83,7 @@ app.all("/:username/:repo/*", async (c) => {
   return container.fetch(c.req.raw);
 });
 
-async function getRepoDiskToken({
+async function getRepoDisk({
   manageDisk,
   repoKey,
 }: {
@@ -91,9 +92,9 @@ async function getRepoDiskToken({
 }) {
   try {
     const file = await manageDisk.getObject(repoKey);
-    const token = new TextDecoder().decode(file);
+    const credentials = JSON.parse(new TextDecoder().decode(file));
 
-    return token;
+    return RepoDiskSchema.parse(credentials);
   } catch (err) {
     /**
      * Archil throws error when object is not present
@@ -127,6 +128,11 @@ const RepoNameSchema = z.object({
         .max(30)
         .regex(/^[A-Za-z0-9_-]+$/),
     ),
+});
+
+const RepoDiskSchema = z.object({
+  diskId: z.string(),
+  token: z.string(),
 });
 
 export default app;

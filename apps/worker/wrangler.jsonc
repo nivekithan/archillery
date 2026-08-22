@@ -13,7 +13,7 @@
   },
   "vars": {
     "GIT_USERNAME": "nivekithan",
-    "ARCHIL_META_DISK": "git-remote-meta",
+    "ARCHIL_META_DISK": "dsk-00000000000642d2",
     "ARCHIL_REGION": "aws-us-east-1",
   },
   "secrets": {
