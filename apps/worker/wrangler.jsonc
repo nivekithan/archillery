@@ -12,6 +12,12 @@
   },
   "placement": {
     "region": "aws:us-east-1"
+  },
+  "vars": {
+    "GIT_USERNAME": "nivekithan"
+  },
+  "secrets": {
+    "required": ["GIT_PASSWORD"]
   }
   // "vars": {
   //   "MY_VAR": "my-variable"
