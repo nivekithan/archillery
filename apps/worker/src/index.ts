@@ -18,9 +18,10 @@ app.use(basicAuth({ password: env.GIT_PASSWORD, username: env.GIT_USERNAME }));
  * Create a empty repo
  */
 app.post("/api/repo", async (c) => {
+  const body = await c.req.json();
   const { repo, username } = z
-    .object({ username: z.string(), repo: z.string() })
-    .parse(c.body);
+    .object({ username: z.string(), repo: RepoNameSchema })
+    .parse(body);
 
   const repoKey = getRepoKey({ repo, username });
 
@@ -44,16 +45,14 @@ app.post("/api/repo", async (c) => {
 app.all("/api/*", () => new Response("NOT FOUND", { status: 404 }));
 
 app.all("/:username/:repo/*", async (c) => {
-  const username = c.req.param("username");
-  const repo = c.req.param("repo");
+  const { repo, username } = z
+    .object({ username: z.string(), repo: RepoNameSchema })
+    .parse({ repo: c.req.param("repo"), username: c.req.param("username") });
 
-  const repository = repo.endsWith(".git") ? repo.slice(0, -4) : repo;
-  if (!repository) {
-    return c.notFound();
-  }
   const repoKey = getRepoKey({ repo, username });
+  const diskName = getDiskName({ repoKey });
 
-  const manageDisk = await archil.getDisk(getDiskName({ repoKey }));
+  const manageDisk = await archil.getDisk(diskName);
   const repoDiskToken = await getRepoDiskToken({
     manageDisk,
     repoKey,
@@ -69,7 +68,9 @@ app.all("/:username/:repo/*", async (c) => {
   const container = getContainer(c.env.GIT_CONTAINER, repoKey);
 
   await container.startAndWaitForPorts({
-    startOptions: { envVars: { ARCHIL_DISK_TOKEN: repoDiskToken } },
+    startOptions: {
+      envVars: { ARCHIL_DISK_TOKEN: repoDiskToken, ARCHIL_DISK_NAME: diskName },
+    },
   });
 
   return container.fetch(c.req.raw);
@@ -97,11 +98,16 @@ async function getRepoDiskToken({
 }
 
 function getRepoKey({ repo, username }: { repo: string; username: string }) {
-  return `${repo}/${username}`;
+  return `${username}/${repo}`;
 }
 
 function getDiskName({ repoKey }: { repoKey: string }) {
   return `git-remote-${repoKey}`;
 }
+
+const RepoNameSchema = z
+  .string()
+  .transform((value) => (value.endsWith(".git") ? value.slice(0, -4) : value))
+  .pipe(z.string().min(1));
 
 export default app;
