@@ -4,8 +4,7 @@ import { Hono } from "hono";
 import { basicAuth } from "hono/basic-auth";
 
 export class GitContainer extends Container<Cloudflare.Env> {
-  defaultPort = 8080;
-  pingEndpoint = "localhost/ping";
+  defaultPort = 3000;
   sleepAfter = "15m";
 }
 

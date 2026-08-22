@@ -13,7 +13,7 @@ COPY entrypoint.sh /usr/local/bin/git-container-entrypoint
 RUN chmod +x /usr/local/bin/git-container-entrypoint \
     && printf 'ok\n' > /var/www/html/ping
 
-EXPOSE 8080
+EXPOSE 3000
 STOPSIGNAL SIGTERM
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
