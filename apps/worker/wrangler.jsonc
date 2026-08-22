@@ -13,6 +13,7 @@
   },
   "vars": {
     "GIT_USERNAME": "nivekithan",
+    "ARCHIL_META_DISK": "git-remote-meta",
   },
   "secrets": {
     "required": ["GIT_PASSWORD", "ARCHIL_API_KEY"],

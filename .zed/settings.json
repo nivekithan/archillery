@@ -1,22 +1,22 @@
 {
   "languages": {
     "CSS": {
-      "language_servers": ["!biome", "..."]
+      "language_servers": ["!biome", "..."],
     },
     "JavaScript": {
-      "language_servers": ["!biome", "..."]
+      "language_servers": ["!biome", "..."],
     },
     "JSON": {
-      "language_servers": ["!biome", "..."]
+      "language_servers": ["!biome", "..."],
     },
     "JSONC": {
-      "language_servers": ["!biome", "..."]
+      "language_servers": ["!biome", "..."],
     },
     "TSX": {
-      "language_servers": ["!biome", "..."]
+      "language_servers": ["!biome", "..."],
     },
     "TypeScript": {
-      "language_servers": ["!biome", "..."]
-    }
-  }
+      "language_servers": ["!biome", "!typescript-language-server", "..."],
+    },
+  },
 }
