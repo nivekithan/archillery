@@ -70,7 +70,11 @@ app.all("/:username/:repo/*", async (c) => {
 
   await container.startAndWaitForPorts({
     startOptions: {
-      envVars: { ARCHIL_DISK_TOKEN: repoDiskToken, ARCHIL_DISK_NAME: diskName },
+      envVars: {
+        ARCHIL_DISK_NAME: diskName,
+        ARCHIL_MOUNT_TOKEN: repoDiskToken,
+        ARCHIL_REGION: c.env.ARCHIL_REGION,
+      },
       enableInternet: true,
     },
   });
