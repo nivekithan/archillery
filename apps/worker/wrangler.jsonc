@@ -18,7 +18,28 @@
   },
   "secrets": {
     "required": ["GIT_PASSWORD"]
-  }
+  },
+  "containers": [
+    {
+      "class_name": "GitContainer",
+      "image": "../container/Dockerfile",
+      "max_instances": 10
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GIT_CONTAINER",
+        "class_name": "GitContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GitContainer"]
+    }
+  ]
   // "vars": {
   //   "MY_VAR": "my-variable"
   // },

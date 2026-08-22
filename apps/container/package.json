@@ -1,0 +1,7 @@
+{
+  "name": "@git-cloudflare/container",
+  "private": true,
+  "scripts": {
+    "build:image": "docker build --tag git-cloudflare-container:local ."
+  }
+}
