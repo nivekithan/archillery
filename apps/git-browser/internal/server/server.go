@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/nivekithan/archillery/apps/git-browser/internal/git"
 )
 
 type Config struct {
@@ -15,7 +17,7 @@ type Config struct {
 }
 
 type server struct {
-	repository *gitRepository
+	repository *git.Repository
 }
 
 type errorResponse struct {
@@ -24,14 +26,12 @@ type errorResponse struct {
 
 func New(config Config) http.Handler {
 	s := &server{
-		repository: &gitRepository{
-			path:    config.RepositoryPath,
-			timeout: config.CommandTimeout,
-		},
+		repository: git.NewRepository(config.RepositoryPath, config.CommandTimeout),
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/repository", handle(s.repositoryMetadata))
+	mux.HandleFunc("GET /api/v1/tree", handle(s.tree))
 	return mux
 }
 
@@ -40,11 +40,23 @@ type repositoryResponse struct {
 }
 
 func (s *server) repositoryMetadata(request *http.Request) (repositoryResponse, int, error) {
-	defaultBranch, err := s.repository.defaultBranch(request.Context())
+	defaultBranch, err := s.repository.DefaultBranch(request.Context())
 	if err != nil {
 		return repositoryResponse{}, 0, err
 	}
 	return repositoryResponse{DefaultBranch: defaultBranch}, http.StatusOK, nil
+}
+
+type treeResponse struct {
+	Entries []git.TreeEntry `json:"entries"`
+}
+
+func (s *server) tree(request *http.Request) (treeResponse, int, error) {
+	entries, err := s.repository.Tree(request.Context(), request.URL.Query().Get("path"))
+	if err != nil {
+		return treeResponse{}, 0, err
+	}
+	return treeResponse{Entries: entries}, http.StatusOK, nil
 }
 
 func handle[T any](next func(*http.Request) (T, int, error)) http.HandlerFunc {
@@ -52,11 +64,16 @@ func handle[T any](next func(*http.Request) (T, int, error)) http.HandlerFunc {
 		response, status, err := next(request)
 		if err != nil {
 			log.Printf("Git browser request failed: %v", err)
-			if errors.Is(err, context.DeadlineExceeded) {
+			switch {
+			case errors.Is(err, git.ErrInvalidPath):
+				writeError(w, http.StatusBadRequest, "invalid path")
+			case errors.Is(err, git.ErrTreeNotFound):
+				writeError(w, http.StatusNotFound, "directory not found")
+			case errors.Is(err, context.DeadlineExceeded):
 				writeError(w, http.StatusGatewayTimeout, "git command timed out")
-				return
+			default:
+				writeError(w, http.StatusInternalServerError, "internal server error")
 			}
-			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 		writeJSON(w, status, response)
