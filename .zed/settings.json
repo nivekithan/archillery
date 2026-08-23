@@ -1,4 +1,16 @@
 {
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/.svn",
+    "**/.hg",
+    "**/.jj",
+    "**/CVS",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/.classpath",
+    "**/.settings",
+    "apps/web/**/routeTree.gen.ts",
+  ],
   "languages": {
     "CSS": {
       "language_servers": ["!biome", "..."],

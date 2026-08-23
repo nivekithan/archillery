@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "git-cloudflare-web",
+  "compatibility_date": "2026-08-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/server.ts",
+  "services": [
+    {
+      "binding": "GIT_WORKER",
+      "service": "git-cloudflare"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
