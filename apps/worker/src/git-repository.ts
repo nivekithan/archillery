@@ -1,13 +1,20 @@
 import { Archil, ArchilApiError, type Sandbox } from "disk";
 import { DurableObject } from "cloudflare:workers";
+import z from "zod";
 
-const SANDBOX_IMAGE =
-  "ghcr.io/nivekithan/archillery@sha256:89e36e1267b85a6285c945299f26f87cd442ded457475004124989730c791cfd";
+const GitServiceSchema = z.object({
+  hostname: z.string().nonempty(),
+});
+
+const SandboxStateSchema = z.object({
+  sandboxId: z.string().nonempty(),
+  hostname: z.string().nonempty(),
+});
 
 export class GitRepository extends DurableObject<CloudflareBindings> {
   private static readonly MAX_TTL = 60 * 60 * 8;
   private static readonly SANDBOX_CACHE_TTL_MS = 10 * 60 * 1000;
-  private static readonly SANDOX_ID_KEY = "SANDBOX_ID";
+  private static readonly SANDBOX_STATE_KEY = "SANDBOX_STATE";
   private static readonly LAST_PING_KEY = "LAST_PING";
 
   private readonly archil: Archil;
@@ -24,31 +31,89 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     this.cachedArchilSandbox = null;
   }
 
-  async ensureSandboxIsCreated() {
-    await this.ctx.blockConcurrencyWhile(async () => {
-      const currentSandboxId = this.getSandoxId();
+  async getGitHost({
+    diskId,
+    mountToken,
+    originToken,
+    repoName,
+    repoUsername,
+  }: {
+    diskId: string;
+    mountToken: string;
+    originToken: string;
+    repoName: string;
+    repoUsername: string;
+  }) {
+    const hostname = await this.ctx.blockConcurrencyWhile(async () => {
+      const currentSandbox = this.getSandboxState();
 
-      if (currentSandboxId) {
-        const sandbnox = await this.getCachedArchilSandbox(currentSandboxId);
+      if (currentSandbox) {
+        const sandbnox = await this.getCachedArchilSandbox(
+          currentSandbox.sandboxId,
+        );
 
         if (sandbnox) {
-          return;
+          return currentSandbox.hostname;
         }
       }
 
-      const sandox = await this.archil.sandboxes.create({
-        baseImage: SANDBOX_IMAGE,
-        vcpuCount: 2,
-        memSizeMiB: 4096,
-        maxTtlSeconds: GitRepository.MAX_TTL,
-      });
-      const sandboxId = sandox.id;
-      this.setSandboxId(sandboxId);
+      const sandox = await this.archil.sandboxes.create(
+        {
+          baseImage: this.env.ARCHIL_SANDBOX_IMAGE,
+          env: {
+            ARCHIL_DISK_ID: diskId,
+            ARCHIL_MOUNT_TOKEN: mountToken,
+            ARCHIL_REGION: this.env.ARCHIL_REGION,
+            ORIGIN_TOKEN: originToken,
+            REPO_NAME: repoName,
+            REPO_USERNAME: repoUsername,
+          },
+          vcpuCount: 2,
+          memSizeMiB: 4096,
+          maxTtlSeconds: GitRepository.MAX_TTL,
+        },
+        { wait: true },
+      );
+
+      const hostname = await this.createGitService(sandox);
+
+      this.setSandboxState({ sandboxId: sandox.id, hostname });
       this.cacheArchilSandbox(sandox);
+      return hostname;
     });
 
     await this.ping();
-    return;
+    return hostname;
+  }
+
+  private async createGitService(sandbox: Sandbox) {
+    try {
+      const service = await sandbox.exec(
+        "archil-sandbox services create git --tcp-port 3000 -- /usr/local/bin/git-container-entrypoint",
+      );
+      if (service.exitCode !== 0) {
+        throw new Error(`Failed to create Git service: ${service.stderr}`);
+      }
+
+      return GitServiceSchema.parse(JSON.parse(service.stdout)).hostname;
+    } catch (error) {
+      await this.cleanupIncompleteSandbox(sandbox);
+      throw error;
+    }
+  }
+
+  private async cleanupIncompleteSandbox(sandbox: Sandbox) {
+    try {
+      await sandbox.stop();
+    } catch (error) {
+      console.error("Failed to stop incomplete sandbox", error);
+    }
+
+    try {
+      await sandbox.delete();
+    } catch (error) {
+      console.error("Failed to delete incomplete sandbox", error);
+    }
   }
 
   private async getCachedArchilSandbox(sandboxId: string) {
@@ -96,13 +161,13 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       return;
     }
 
-    const sandboxId = this.getSandoxId();
+    const sandboxState = this.getSandboxState();
 
-    if (!sandboxId) {
+    if (!sandboxState) {
       return;
     }
 
-    const sandbox = await this.getArchilSandbox(sandboxId);
+    const sandbox = await this.getArchilSandbox(sandboxState.sandboxId);
 
     if (!sandbox) {
       this.cachedArchilSandbox = null;
@@ -121,16 +186,19 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     return;
   }
 
-  private getSandoxId() {
-    const sandboxId = this.ctx.storage.kv.get<string | null | undefined>(
-      GitRepository.SANDOX_ID_KEY,
+  private getSandboxState() {
+    const state = this.ctx.storage.kv.get<string | null | undefined>(
+      GitRepository.SANDBOX_STATE_KEY,
     );
 
-    return sandboxId ?? null;
+    return state ? SandboxStateSchema.parse(JSON.parse(state)) : null;
   }
 
-  private setSandboxId(sandboxId: string) {
-    return this.ctx.storage.kv.put(GitRepository.SANDOX_ID_KEY, sandboxId);
+  private setSandboxState(state: z.infer<typeof SandboxStateSchema>) {
+    return this.ctx.storage.kv.put(
+      GitRepository.SANDBOX_STATE_KEY,
+      JSON.stringify(state),
+    );
   }
 
   private async ping() {
