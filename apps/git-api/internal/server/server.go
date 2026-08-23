@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nivekithan/archillery/apps/git-browser/internal/git"
+	"github.com/nivekithan/archillery/apps/git-api/internal/git"
 )
 
 type Config struct {
@@ -63,7 +63,7 @@ func handle[T any](next func(*http.Request) (T, int, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		response, status, err := next(request)
 		if err != nil {
-			log.Printf("Git browser request failed: %v", err)
+			log.Printf("Git API request failed: %v", err)
 			switch {
 			case errors.Is(err, git.ErrInvalidPath):
 				writeError(w, http.StatusBadRequest, "invalid path")

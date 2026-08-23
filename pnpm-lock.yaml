@@ -14,7 +14,7 @@ importers:
 
   apps/container: {}
 
-  apps/git-browser: {}
+  apps/git-api: {}
 
   apps/worker:
     dependencies:

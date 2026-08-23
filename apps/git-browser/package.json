@@ -1,8 +1,0 @@
-{
-  "name": "@git-cloudflare/git-browser",
-  "private": true,
-  "scripts": {
-    "build": "mkdir -p dist && go build -o dist/git-browser ./cmd/git-browser",
-    "dev": "go run ./cmd/git-browser"
-  }
-}
