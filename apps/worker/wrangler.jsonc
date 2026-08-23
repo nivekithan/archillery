@@ -15,23 +15,16 @@
     "GIT_USERNAME": "nivekithan",
     "ARCHIL_META_DISK": "dsk-00000000000642d2",
     "ARCHIL_REGION": "aws-us-east-1",
+    "GIT_IDLE_TIMEOUT_SECONDS": 900,
   },
   "secrets": {
     "required": ["GIT_PASSWORD", "ARCHIL_API_KEY"],
   },
-  "containers": [
-    {
-      "class_name": "GitContainer",
-      "image": "../container/Dockerfile",
-      "instance_type": "basic",
-      "max_instances": 10,
-    },
-  ],
   "durable_objects": {
     "bindings": [
       {
-        "name": "GIT_CONTAINER",
-        "class_name": "GitContainer",
+        "name": "GIT_REPOSITORY",
+        "class_name": "GitRepository",
       },
     ],
   },
@@ -39,6 +32,11 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["GitContainer"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["GitRepository"],
+      "deleted_classes": ["GitContainer"],
     },
   ],
 }

@@ -1,10 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["DOCKER_CONTEXT", "DOCKER_HOST"],
   "tasks": {
     "build": {
       "description": "Build each package after its workspace dependencies",
-      "cache": false,
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },

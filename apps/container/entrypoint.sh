@@ -4,6 +4,7 @@ set -eu
 : "${ARCHIL_DISK_ID:?ARCHIL_DISK_ID is required}"
 : "${ARCHIL_MOUNT_TOKEN:?ARCHIL_MOUNT_TOKEN is required}"
 : "${ARCHIL_REGION:?ARCHIL_REGION is required}"
+: "${ORIGIN_TOKEN:?ORIGIN_TOKEN is required}"
 : "${REPO_NAME:?REPO_NAME is required}"
 : "${REPO_USERNAME:?REPO_USERNAME is required}"
 
@@ -77,6 +78,7 @@ repo.owner=$REPO_USERNAME
 repo.clone-url=/$REPO_USERNAME/$REPO_NAME.git
 repo.readme=:README.md
 EOF
+htpasswd -bc /etc/apache2/origin.htpasswd origin "$ORIGIN_TOKEN"
 
 set +u
 . /etc/apache2/envvars

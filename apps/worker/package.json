@@ -9,13 +9,13 @@
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
-    "@cloudflare/containers": "^0.3.7",
     "disk": "^1.0.0",
     "hono": "^4.13.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "typescript": "^7.0.2",
     "wrangler": "^4.110.0"
   }
 }

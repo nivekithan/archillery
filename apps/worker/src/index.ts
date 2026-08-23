@@ -1,16 +1,20 @@
-import { Container, getContainer } from "@cloudflare/containers";
 import { env } from "cloudflare:workers";
 import { Hono } from "hono";
 import { basicAuth } from "hono/basic-auth";
 import * as archil from "disk";
 import z from "zod";
 
-archil.configure({ apiKey: env.ARCHIL_API_KEY, region: env.ARCHIL_REGION });
+import {
+  GitRepository,
+  REPO_DISK_ID_HEADER,
+  REPO_DISK_TOKEN_HEADER,
+  REPO_NAME_HEADER,
+  REPO_USERNAME_HEADER,
+} from "./git-repository";
 
-export class GitContainer extends Container<Cloudflare.Env> {
-  defaultPort = 3000;
-  sleepAfter = "15m";
-}
+export { GitRepository };
+
+archil.configure({ apiKey: env.ARCHIL_API_KEY, region: env.ARCHIL_REGION });
 
 const app = new Hono<{ Bindings: Cloudflare.Env }>();
 
@@ -77,22 +81,14 @@ app.all("/:username/:repo/*", async (c) => {
     return new Response("NOT FOUND", { status: 404 });
   }
 
-  const container = getContainer(c.env.GIT_CONTAINER, repoKey);
+  const repository = c.env.GIT_REPOSITORY.getByName(repoKey);
+  const headers = new Headers(c.req.raw.headers);
+  headers.set(REPO_DISK_ID_HEADER, repoDisk.diskId);
+  headers.set(REPO_DISK_TOKEN_HEADER, repoDisk.token);
+  headers.set(REPO_NAME_HEADER, repo);
+  headers.set(REPO_USERNAME_HEADER, username);
 
-  await container.startAndWaitForPorts({
-    startOptions: {
-      envVars: {
-        ARCHIL_DISK_ID: repoDisk.diskId,
-        ARCHIL_MOUNT_TOKEN: repoDisk.token,
-        ARCHIL_REGION: c.env.ARCHIL_REGION,
-        REPO_NAME: repo,
-        REPO_USERNAME: username,
-      },
-      enableInternet: true,
-    },
-  });
-
-  return container.fetch(c.req.raw);
+  return repository.fetch(new Request(c.req.raw, { headers }));
 });
 
 async function getRepoDisk({

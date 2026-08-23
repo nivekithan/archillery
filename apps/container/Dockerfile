@@ -4,6 +4,9 @@ FROM debian:bookworm-slim
 
 ARG ARCHIL_CLIENT_VERSION=0.8.30-1786758716
 
+LABEL org.opencontainers.image.source="https://github.com/nivekithan/archillery" \
+      org.opencontainers.image.description="Git smart HTTP and cgit runtime for Archil sandboxes"
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends apache2 ca-certificates cgit curl git tini \
     && a2enmod cgi rewrite \
