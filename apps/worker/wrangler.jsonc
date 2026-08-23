@@ -38,5 +38,15 @@
       "new_sqlite_classes": ["GitRepository"],
       "deleted_classes": ["GitContainer"],
     },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["GitContainer"],
+      "deleted_classes": ["GitRepository"],
+    },
+    {
+      "tag": "v4",
+      "new_sqlite_classes": ["GitRepository"],
+      "deleted_classes": ["GitContainer"],
+    },
   ],
 }
