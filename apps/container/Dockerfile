@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.source="https://github.com/nivekithan/archillery"
       org.opencontainers.image.description="Git smart HTTP and cgit runtime for Archil sandboxes"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends apache2 ca-certificates cgit curl git tini \
+    && apt-get install -y --no-install-recommends apache2 ca-certificates cgit curl git \
     && a2enmod cgi rewrite \
     && ARCHIL_CLIENT_VERSION="$ARCHIL_CLIENT_VERSION" ARCHIL_SKIP_IAM_CHECK=1 \
        sh -c 'curl -fsSL https://archil.com/install | sh' \
@@ -19,9 +19,3 @@ COPY entrypoint.sh /usr/local/bin/git-container-entrypoint
 
 RUN chmod +x /usr/local/bin/git-container-entrypoint \
     && printf 'ok\n' > /var/www/html/ping
-
-EXPOSE 3000
-STOPSIGNAL SIGTERM
-
-ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/usr/local/bin/git-container-entrypoint"]

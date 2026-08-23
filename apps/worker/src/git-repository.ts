@@ -11,6 +11,9 @@ const SANDBOX_IMAGE =
   "ghcr.io/nivekithan/archillery@sha256:89e36e1267b85a6285c945299f26f87cd442ded457475004124989730c791cfd";
 
 export class GitRepository extends DurableObject<CloudflareBindings> {
+  private static readonly MAX_TTL = 60 * 60 * 8;
+  private static readonly SANDOX_ID_KEY = "";
+
   private readonly archil: Archil;
   private readonly idleTimeoutMs: number;
 
@@ -25,11 +28,19 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
 
   async ensureSandboxIsRunning() {
     const id = this.ctx.id;
-    const sandox = await this.archil.sandboxes.create({
-      baseImage: SANDBOX_IMAGE,
-      name: id.toString(),
-      vcpuCount: 2,
-      memSizeMiB: 4096,
-    });
+    const sandox = await this.archil.sandboxes.create(
+      {
+        baseImage: SANDBOX_IMAGE,
+        name: id.toString(),
+        vcpuCount: 2,
+        memSizeMiB: 4096,
+        maxTtlSeconds: GitRepository.MAX_TTL,
+      },
+      {
+        wait: true,
+      },
+    );
+    const sandboxId = sandox.id;
+    this.ctx.storage.kv.put(GitRepository.SANDOX_ID_KEY, sandboxId);
   }
 }
