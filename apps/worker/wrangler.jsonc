@@ -21,6 +21,7 @@
   },
   "containers": [
     {
+      "name": "git-cloudflare-gitcontainer-v3",
       "class_name": "GitContainer",
       "image": "../container/Dockerfile",
       "instance_type": "basic",
@@ -39,6 +40,16 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["GitContainer"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["GitRepository"],
+      "deleted_classes": ["GitContainer"],
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["GitContainer"],
+      "deleted_classes": ["GitRepository"],
     },
   ],
 }
