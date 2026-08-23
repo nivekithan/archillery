@@ -62,6 +62,12 @@ app.all("/:username/:repo/*", async (c) => {
   });
 
   const repoKey = getRepoKey({ repo, username });
+  console.info("Git request received", {
+    method: c.req.method,
+    path: c.req.path,
+    repoKey,
+  });
+
   const manageDisk = await archil.getDisk(c.env.ARCHIL_META_DISK);
   const repoDisk = await getRepoDisk({
     manageDisk,
@@ -69,6 +75,7 @@ app.all("/:username/:repo/*", async (c) => {
   });
 
   if (!repoDisk) {
+    console.warn("Git repository disk not found", { repoKey });
     /**
      * Either we are unable to get the file or repo is not created
      */
@@ -88,11 +95,11 @@ app.all("/:username/:repo/*", async (c) => {
   return proxyGitRequest(c.req.raw, gitHost, c.env.GIT_PASSWORD);
 });
 
-function proxyGitRequest(
+async function proxyGitRequest(
   request: Request,
   gitHost: string,
   originToken: string,
-) {
+): Promise<Response> {
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.set("authorization", `Basic ${btoa(`origin:${originToken}`)}`);
@@ -102,7 +109,13 @@ function proxyGitRequest(
   url.hostname = gitHost;
   url.port = "";
 
-  return fetch(
+  console.info("Proxying Git request", {
+    gitHost,
+    method: request.method,
+    path: url.pathname,
+  });
+
+  const response = await fetch(
     new Request(url, {
       body: request.body,
       headers,
@@ -110,6 +123,13 @@ function proxyGitRequest(
       redirect: "manual",
     }),
   );
+  console.info("Git origin responded", {
+    gitHost,
+    method: request.method,
+    path: url.pathname,
+    status: response.status,
+  });
+  return response;
 }
 
 async function getRepoDisk({
@@ -124,11 +144,14 @@ async function getRepoDisk({
     const credentials = JSON.parse(new TextDecoder().decode(file));
 
     return RepoDiskSchema.parse(credentials);
-  } catch (err) {
+  } catch (error) {
     /**
      * Archil throws error when object is not present
      */
-    console.log(err);
+    console.warn("Failed to load repository disk metadata", {
+      error,
+      repoKey,
+    });
     return null;
   }
 }

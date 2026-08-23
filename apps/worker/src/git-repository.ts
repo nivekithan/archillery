@@ -11,6 +11,18 @@ const SandboxStateSchema = z.object({
   hostname: z.string().nonempty(),
 });
 
+const CREATE_GIT_SERVICE_COMMAND = [
+  "archil-sandbox services create",
+  '--env ARCHIL_DISK_ID="$ARCHIL_DISK_ID"',
+  '--env ARCHIL_MOUNT_TOKEN="$ARCHIL_MOUNT_TOKEN"',
+  '--env ARCHIL_REGION="$ARCHIL_REGION"',
+  '--env ORIGIN_TOKEN="$ORIGIN_TOKEN"',
+  '--env REPO_NAME="$REPO_NAME"',
+  '--env REPO_USERNAME="$REPO_USERNAME"',
+  "--tcp-port 3000",
+  "git -- /usr/local/bin/git-container-entrypoint",
+].join(" ");
+
 export class GitRepository extends DurableObject<CloudflareBindings> {
   private static readonly MAX_TTL = 60 * 60 * 8;
   private static readonly SANDBOX_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -44,41 +56,65 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     repoName: string;
     repoUsername: string;
   }) {
+    console.info("Resolving Git sandbox", { diskId, repoName, repoUsername });
+    const sandboxEnv = {
+      ARCHIL_DISK_ID: diskId,
+      ARCHIL_MOUNT_TOKEN: mountToken,
+      ARCHIL_REGION: this.env.ARCHIL_REGION,
+      ORIGIN_TOKEN: originToken,
+      REPO_NAME: repoName,
+      REPO_USERNAME: repoUsername,
+    };
+
     const hostname = await this.ctx.blockConcurrencyWhile(async () => {
       const currentSandbox = this.getSandboxState();
 
       if (currentSandbox) {
+        console.info("Found stored sandbox state", {
+          hostname: currentSandbox.hostname,
+          sandboxId: currentSandbox.sandboxId,
+        });
         const sandbnox = await this.getCachedArchilSandbox(
           currentSandbox.sandboxId,
         );
 
         if (sandbnox) {
+          console.info("Reusing Git sandbox", {
+            hostname: currentSandbox.hostname,
+            sandboxId: currentSandbox.sandboxId,
+            status: sandbnox.status,
+          });
           return currentSandbox.hostname;
         }
+
+        console.warn("Stored Git sandbox no longer exists", {
+          sandboxId: currentSandbox.sandboxId,
+        });
       }
 
+      console.info("Creating Git sandbox", { diskId, repoName, repoUsername });
       const sandox = await this.archil.sandboxes.create(
         {
           baseImage: this.env.ARCHIL_SANDBOX_IMAGE,
-          env: {
-            ARCHIL_DISK_ID: diskId,
-            ARCHIL_MOUNT_TOKEN: mountToken,
-            ARCHIL_REGION: this.env.ARCHIL_REGION,
-            ORIGIN_TOKEN: originToken,
-            REPO_NAME: repoName,
-            REPO_USERNAME: repoUsername,
-          },
           vcpuCount: 2,
           memSizeMiB: 4096,
           maxTtlSeconds: GitRepository.MAX_TTL,
         },
         { wait: true },
       );
+      console.info("Git sandbox created", {
+        sandboxId: sandox.id,
+        status: sandox.status,
+      });
 
-      const hostname = await this.createGitService(sandox);
+      const hostname = await this.createGitService(sandox, sandboxEnv);
 
       this.setSandboxState({ sandboxId: sandox.id, hostname });
       this.cacheArchilSandbox(sandox);
+      console.info("Git sandbox is ready", {
+        hostname,
+        sandboxId: sandox.id,
+      });
       return hostname;
     });
 
@@ -86,31 +122,47 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     return hostname;
   }
 
-  private async createGitService(sandbox: Sandbox) {
+  private async createGitService(
+    sandbox: Sandbox,
+    env: Record<string, string>,
+  ) {
     try {
-      const service = await sandbox.exec(
-        "archil-sandbox services create git --tcp-port 3000 -- /usr/local/bin/git-container-entrypoint",
-      );
+      console.info("Creating Git network service", { sandboxId: sandbox.id });
+      const service = await sandbox.exec(CREATE_GIT_SERVICE_COMMAND, { env });
       if (service.exitCode !== 0) {
         throw new Error(`Failed to create Git service: ${service.stderr}`);
       }
 
-      return GitServiceSchema.parse(JSON.parse(service.stdout)).hostname;
+      const hostname = GitServiceSchema.parse(
+        JSON.parse(service.stdout),
+      ).hostname;
+      console.info("Git network service created", {
+        hostname,
+        sandboxId: sandbox.id,
+      });
+      return hostname;
     } catch (error) {
+      console.error("Failed to create Git network service", {
+        error,
+        sandboxId: sandbox.id,
+      });
       await this.cleanupIncompleteSandbox(sandbox);
       throw error;
     }
   }
 
   private async cleanupIncompleteSandbox(sandbox: Sandbox) {
+    console.warn("Cleaning up incomplete sandbox", { sandboxId: sandbox.id });
     try {
       await sandbox.stop();
+      console.info("Incomplete sandbox stopped", { sandboxId: sandbox.id });
     } catch (error) {
       console.error("Failed to stop incomplete sandbox", error);
     }
 
     try {
       await sandbox.delete();
+      console.info("Incomplete sandbox deleted", { sandboxId: sandbox.id });
     } catch (error) {
       console.error("Failed to delete incomplete sandbox", error);
     }
@@ -123,9 +175,11 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       cached.sandbox.id === sandboxId &&
       cached.expiresAt > Date.now()
     ) {
+      console.info("Archil sandbox cache hit", { sandboxId });
       return cached.sandbox;
     }
 
+    console.info("Archil sandbox cache miss", { sandboxId });
     const sandbox = await this.getArchilSandbox(sandboxId);
     if (sandbox) {
       this.cacheArchilSandbox(sandbox);
@@ -152,37 +206,58 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
         throw error;
       }
 
+      console.warn("Archil sandbox not found", { sandboxId });
       return null;
     }
   }
 
   async alarm() {
     if (!this.isTimeoutReached()) {
+      console.info("Ignoring Git sandbox alarm; repository is active");
       return;
     }
 
     const sandboxState = this.getSandboxState();
 
     if (!sandboxState) {
+      console.info("Ignoring Git sandbox alarm; no sandbox is stored");
       return;
     }
 
+    console.info("Checking idle Git sandbox", {
+      sandboxId: sandboxState.sandboxId,
+    });
     const sandbox = await this.getArchilSandbox(sandboxState.sandboxId);
 
     if (!sandbox) {
       this.cachedArchilSandbox = null;
+      console.warn("Idle Git sandbox no longer exists", {
+        sandboxId: sandboxState.sandboxId,
+      });
       return;
     }
 
     if (!this.isTimeoutReached()) {
+      console.info("Git sandbox became active during alarm", {
+        sandboxId: sandbox.id,
+      });
       return;
     }
 
     if (sandbox.status === "pending" || sandbox.status === "running") {
+      console.info("Stopping idle Git sandbox", {
+        sandboxId: sandbox.id,
+        status: sandbox.status,
+      });
       await sandbox.stop();
+      console.info("Idle Git sandbox stopped", { sandboxId: sandbox.id });
       return;
     }
 
+    console.info("Git sandbox is already inactive", {
+      sandboxId: sandbox.id,
+      status: sandbox.status,
+    });
     return;
   }
 
@@ -203,11 +278,15 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
 
   private async ping() {
     const lastPing = new Date();
+    const alarmAt = lastPing.getTime() + this.idleTimeoutMs;
     this.ctx.storage.kv.put(
       GitRepository.LAST_PING_KEY,
       lastPing.toISOString(),
     );
-    await this.ctx.storage.setAlarm(lastPing.getTime() + this.idleTimeoutMs);
+    await this.ctx.storage.setAlarm(alarmAt);
+    console.info("Git sandbox idle deadline updated", {
+      alarmAt: new Date(alarmAt).toISOString(),
+    });
   }
 
   private getLastPing() {
