@@ -122,6 +122,34 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     return hostname;
   }
 
+  async deleteRepository() {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const sandboxState = this.getSandboxState();
+      const sandbox = sandboxState
+        ? await this.getArchilSandbox(sandboxState.sandboxId)
+        : null;
+
+      if (sandbox) {
+        if (
+          sandbox.status !== "stopped" &&
+          sandbox.status !== "exited" &&
+          sandbox.status !== "failed"
+        ) {
+          await sandbox.stop();
+        }
+        await sandbox.delete();
+      }
+
+      this.cachedArchilSandbox = null;
+      await this.ctx.storage.deleteAll();
+      console.info("Git repository state deleted", {
+        sandboxId: sandboxState?.sandboxId,
+      });
+
+      return { sandboxId: sandboxState?.sandboxId ?? null };
+    });
+  }
+
   private async createGitService(
     sandbox: Sandbox,
     env: Record<string, string>,

@@ -21,6 +21,22 @@
   "secrets": {
     "required": ["GIT_PASSWORD", "ARCHIL_API_KEY"],
   },
+  "queues": {
+    "producers": [
+      {
+        "binding": "SANDBOX_QUEUE",
+        "queue": "git-cloudflare-sandbox-prewarm",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "git-cloudflare-sandbox-prewarm",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 3,
+      },
+    ],
+  },
   "durable_objects": {
     "bindings": [
       {

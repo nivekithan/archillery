@@ -47,7 +47,31 @@ app.post("/api/repo", async (c) => {
     repoKey,
     JSON.stringify({ diskId: repoDisk.disk.id, token }),
   );
+  await c.env.SANDBOX_QUEUE.send({ repo, username });
 
+  return c.json({ ok: true });
+});
+
+app.delete("/api/repo", async (c) => {
+  const body = await c.req.json();
+  const { repo, username } = RepoNameSchema.parse(body);
+  const repoKey = getRepoKey({ repo, username });
+
+  const manageDisk = await archil.getDisk(c.env.ARCHIL_META_DISK);
+  const repoDisk = await getRepoDisk({ manageDisk, repoKey });
+  if (!repoDisk) return c.json({ ok: false }, 404);
+
+  const repository = c.env.GIT_REPOSITORY.getByName(repoKey);
+  const { sandboxId } = await repository.deleteRepository();
+  const disk = await archil.getDisk(repoDisk.diskId);
+  await disk.delete();
+  await manageDisk.deleteObject(repoKey);
+
+  console.info("Git repository deleted", {
+    diskId: repoDisk.diskId,
+    repoKey,
+    sandboxId,
+  });
   return c.json({ ok: true });
 });
 
@@ -208,4 +232,31 @@ const RepoDiskSchema = z.object({
   token: z.string(),
 });
 
-export default app;
+const worker = {
+  fetch: app.fetch,
+  async queue(batch, workerEnv) {
+    for (const message of batch.messages) {
+      const { repo, username } = RepoNameSchema.parse(message.body);
+      const repoKey = getRepoKey({ repo, username });
+      console.info("Prewarming Git sandbox", { repoKey });
+
+      const manageDisk = await archil.getDisk(workerEnv.ARCHIL_META_DISK);
+      const repoDisk = await getRepoDisk({ manageDisk, repoKey });
+      if (!repoDisk) {
+        throw new Error(`Repository disk metadata not found for ${repoKey}`);
+      }
+
+      const repository = workerEnv.GIT_REPOSITORY.getByName(repoKey);
+      await repository.getGitHost({
+        diskId: repoDisk.diskId,
+        mountToken: repoDisk.token,
+        originToken: workerEnv.GIT_PASSWORD,
+        repoName: repo,
+        repoUsername: username,
+      });
+      console.info("Git sandbox prewarmed", { repoKey });
+    }
+  },
+} satisfies ExportedHandler<CloudflareBindings, unknown>;
+
+export default worker;
