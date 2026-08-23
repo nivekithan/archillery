@@ -47,12 +47,13 @@ echo "Mounting Archil disk"
 archil mount "$ARCHIL_DISK_ID" /var/lib/git --region "$ARCHIL_REGION"
 mounted=true
 
+chown www-data:www-data /var/lib/git
+
 echo "Preparing Git repository"
 if [ ! -f "$repository/HEAD" ] || [ ! -f "$repository/config" ]; then
-  git init --bare --initial-branch=main "$repository"
+  runuser -u www-data -- git init --bare --initial-branch=main "$repository"
 fi
 
-chown -R www-data:www-data /var/lib/git
 runuser -u www-data -- git -C "$repository" config core.fsync all
 runuser -u www-data -- git -C "$repository" config core.fsyncMethod fsync
 runuser -u www-data -- git -C "$repository" config http.receivepack true
