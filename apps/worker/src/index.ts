@@ -76,10 +76,41 @@ app.all("/:username/:repo/*", async (c) => {
   }
 
   const repository = c.env.GIT_REPOSITORY.getByName(repoKey);
-  const headers = new Headers(c.req.raw.headers);
+  const gitHost = await repository.getGitHost({
+    diskId: repoDisk.diskId,
+    mountToken: repoDisk.token,
+    // TODO: Figure out a way to create sepreate origin token for each repo
+    originToken: c.env.GIT_PASSWORD,
+    repoName: repo,
+    repoUsername: username,
+  });
 
-  return repository.fetch(new Request(c.req.raw, { headers }));
+  return proxyGitRequest(c.req.raw, gitHost, c.env.GIT_PASSWORD);
 });
+
+function proxyGitRequest(
+  request: Request,
+  gitHost: string,
+  originToken: string,
+) {
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+  headers.set("authorization", `Basic ${btoa(`origin:${originToken}`)}`);
+
+  const url = new URL(request.url);
+  url.protocol = "https:";
+  url.hostname = gitHost;
+  url.port = "";
+
+  return fetch(
+    new Request(url, {
+      body: request.body,
+      headers,
+      method: request.method,
+      redirect: "manual",
+    }),
+  );
+}
 
 async function getRepoDisk({
   manageDisk,
