@@ -4,13 +4,7 @@ import { basicAuth } from "hono/basic-auth";
 import * as archil from "disk";
 import z from "zod";
 
-import {
-  GitRepository,
-  REPO_DISK_ID_HEADER,
-  REPO_DISK_TOKEN_HEADER,
-  REPO_NAME_HEADER,
-  REPO_USERNAME_HEADER,
-} from "./git-repository";
+import { GitRepository } from "./git-repository";
 
 export { GitRepository };
 
@@ -83,10 +77,6 @@ app.all("/:username/:repo/*", async (c) => {
 
   const repository = c.env.GIT_REPOSITORY.getByName(repoKey);
   const headers = new Headers(c.req.raw.headers);
-  headers.set(REPO_DISK_ID_HEADER, repoDisk.diskId);
-  headers.set(REPO_DISK_TOKEN_HEADER, repoDisk.token);
-  headers.set(REPO_NAME_HEADER, repo);
-  headers.set(REPO_USERNAME_HEADER, username);
 
   return repository.fetch(new Request(c.req.raw, { headers }));
 });
@@ -124,7 +114,10 @@ function isPublicRead(request: Request) {
   const url = new URL(request.url);
   const service = url.searchParams.get("service");
 
-  if (service === "git-receive-pack" || url.pathname.endsWith("/git-receive-pack")) {
+  if (
+    service === "git-receive-pack" ||
+    url.pathname.endsWith("/git-receive-pack")
+  ) {
     return false;
   }
 
