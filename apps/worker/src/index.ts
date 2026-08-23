@@ -5,6 +5,7 @@ import * as archil from "disk";
 import z from "zod";
 
 import { GitRepository } from "./git-repository";
+import { requestGitService } from "./git-service";
 
 export { GitRepository };
 
@@ -116,45 +117,12 @@ app.all("/:username/:repo/*", async (c) => {
     repoUsername: username,
   });
 
-  return proxyGitRequest(c.req.raw, gitHost, c.env.GIT_PASSWORD);
+  return requestGitService({
+    request: c.req.raw,
+    gitHost,
+    originToken: c.env.GIT_PASSWORD,
+  });
 });
-
-async function proxyGitRequest(
-  request: Request,
-  gitHost: string,
-  originToken: string,
-): Promise<Response> {
-  const headers = new Headers(request.headers);
-  headers.delete("host");
-  headers.set("authorization", `Basic ${btoa(`origin:${originToken}`)}`);
-
-  const url = new URL(request.url);
-  url.protocol = "https:";
-  url.hostname = gitHost;
-  url.port = "";
-
-  console.info("Proxying Git request", {
-    gitHost,
-    method: request.method,
-    path: url.pathname,
-  });
-
-  const response = await fetch(
-    new Request(url, {
-      body: request.body,
-      headers,
-      method: request.method,
-      redirect: "manual",
-    }),
-  );
-  console.info("Git origin responded", {
-    gitHost,
-    method: request.method,
-    path: url.pathname,
-    status: response.status,
-  });
-  return response;
-}
 
 async function getRepoDisk({
   manageDisk,

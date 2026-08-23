@@ -2,6 +2,11 @@ import { Archil, ArchilApiError, type Sandbox } from "disk";
 import { DurableObject } from "cloudflare:workers";
 import z from "zod";
 
+import { requestGitService } from "./git-service";
+
+const SERVICE_READY_TIMEOUT_MS = 30_000;
+const SERVICE_READY_POLL_INTERVAL_MS = 250;
+
 const GitServiceSchema = z.object({
   hostname: z.string().nonempty(),
 });
@@ -164,6 +169,10 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       const hostname = GitServiceSchema.parse(
         JSON.parse(service.stdout),
       ).hostname;
+      await this.waitForGitService({
+        gitHost: hostname,
+        originToken: env.ORIGIN_TOKEN,
+      });
       console.info("Git network service created", {
         hostname,
         sandboxId: sandbox.id,
@@ -177,6 +186,43 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       await this.cleanupIncompleteSandbox(sandbox);
       throw error;
     }
+  }
+
+  private async waitForGitService({
+    gitHost,
+    originToken,
+  }: {
+    gitHost: string;
+    originToken: string;
+  }) {
+    const startedAt = Date.now();
+    const readyDeadline = startedAt + SERVICE_READY_TIMEOUT_MS;
+    let lastStatus: number | undefined;
+
+    while (Date.now() < readyDeadline) {
+      try {
+        const response = await requestGitService({
+          request: new Request("https://git-service/ping"),
+          gitHost,
+          originToken,
+        });
+        lastStatus = response.status;
+        if (response.ok) {
+          console.info("Git network service is ready", {
+            gitHost,
+            readyInMs: Date.now() - startedAt,
+          });
+          return;
+        }
+      } catch {
+        lastStatus = undefined;
+      }
+      await scheduler.wait(SERVICE_READY_POLL_INTERVAL_MS);
+    }
+
+    throw new Error(
+      `Git network service did not become ready (last status: ${lastStatus ?? "unreachable"})`,
+    );
   }
 
   private async cleanupIncompleteSandbox(sandbox: Sandbox) {
