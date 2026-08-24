@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	pathpkg "path"
+	"sort"
 	"strconv"
 )
 
@@ -44,6 +45,14 @@ func parseTreeEntries(output []byte, parentPath string) ([]TreeEntry, error) {
 		}
 		entries = append(entries, entry)
 	}
+	sort.Slice(entries, func(i, j int) bool {
+		leftDirectory := entries[i].Type == "tree"
+		rightDirectory := entries[j].Type == "tree"
+		if leftDirectory != rightDirectory {
+			return leftDirectory
+		}
+		return entries[i].Name < entries[j].Name
+	})
 	return entries, nil
 }
 
