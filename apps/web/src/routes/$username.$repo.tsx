@@ -56,15 +56,20 @@ const RepositorySearchSchema = z.object({
 export const Route = createFileRoute("/$username/$repo")({
   validateSearch: RepositorySearchSchema,
   loaderDeps: ({ search }) => ({ branch: search.branch, path: search.path }),
-  loader: ({ deps, params }) =>
-    getRepository({
+  loader: async ({ deps, params }) => {
+    const repository = await getRepository({
       data: {
         branch: deps.branch,
         path: deps.path,
         repo: params.repo,
         username: params.username,
       },
-    }),
+    });
+    return {
+      ...repository,
+      selectedBranch: deps.branch ?? repository.defaultBranch,
+    };
+  },
   head: ({ loaderData, params }) => ({
     meta: [
       {
@@ -157,7 +162,7 @@ function Repository() {
             <ComboboxInput
               aria-label="Branch"
               placeholder="Find a branch"
-              className="w-fit min-w-28 max-w-64 [&_[data-slot=input-group-control]]:w-auto [&_[data-slot=input-group-control]]:[field-sizing:content]"
+              className="w-fit min-w-28 max-w-64 **:data-[slot=input-group-control]:w-auto **:data-[slot=input-group-control]:field-sizing-content"
             >
               <InputGroupAddon>
                 <GitBranchIcon />
