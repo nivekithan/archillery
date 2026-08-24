@@ -74,7 +74,7 @@ function TableRow<T>({ className, ...props }: RowProps<T>) {
     <RowPrimitive
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted data-selected:bg-muted",
+        "h-11 border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted data-selected:bg-muted",
         className
       )}
       {...props}
