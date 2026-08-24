@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	pathpkg "path"
 	"strings"
 	"time"
@@ -17,35 +16,33 @@ var (
 )
 
 type Repository struct {
-	path    string
-	timeout time.Duration
+	commands *commands
 }
 
 func NewRepository(path string, timeout time.Duration) *Repository {
-	return &Repository{path: path, timeout: timeout}
+	return &Repository{commands: newCommands(path, timeout)}
 }
 
 func (r *Repository) DefaultBranch(ctx context.Context) (string, error) {
-	output, err := r.output(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
+	defaultBranch, err := r.commands.defaultBranch(ctx)
 	if err != nil {
 		return "", fmt.Errorf("read default branch: %w", err)
 	}
-	return strings.TrimSpace(string(output)), nil
+	return defaultBranch, nil
 }
 
 func (r *Repository) Branches(ctx context.Context, defaultBranch string) ([]string, error) {
-	output, err := r.output(ctx, "for-each-ref", "--format=%(refname:short)", "--sort=refname", "refs/heads")
+	listedBranches, err := r.commands.branches(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list branches: %w", err)
 	}
 
 	branches := make([]string, 0)
 	foundDefault := false
-	for branch := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
-		switch {
-		case branch == defaultBranch:
+	for _, branch := range listedBranches {
+		if branch == defaultBranch {
 			foundDefault = true
-		case branch != "":
+		} else {
 			branches = append(branches, branch)
 		}
 	}
@@ -63,10 +60,11 @@ func (r *Repository) Tree(ctx context.Context, branch, treePath string) ([]TreeE
 	branchRef := "HEAD"
 	if branch != "" {
 		branchRef = "refs/heads/" + branch
-		if _, err := r.output(ctx, "show-ref", "--verify", "--quiet", branchRef); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				return nil, err
-			}
+		exists, err := r.commands.refExists(ctx, branchRef)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
 			return nil, fmt.Errorf("%w: %s", ErrBranchNotFound, branch)
 		}
 	}
@@ -75,29 +73,17 @@ func (r *Repository) Tree(ctx context.Context, branch, treePath string) ([]TreeE
 	if treePath != "" {
 		treeSpec = branchRef + ":" + treePath
 	}
-	output, err := r.output(ctx, "ls-tree", "-z", "-l", treeSpec)
+	entries, err := r.commands.tree(ctx, treeSpec, treePath)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("%w: %s", ErrTreeNotFound, treePath)
-	}
-	return parseTreeEntries(output, treePath)
-}
-
-func (r *Repository) output(ctx context.Context, args ...string) ([]byte, error) {
-	commandContext, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	commandArgs := append([]string{"--git-dir", r.path}, args...)
-	output, err := exec.CommandContext(commandContext, "git", commandArgs...).Output()
-	if err != nil {
-		if commandContext.Err() != nil {
-			return nil, commandContext.Err()
+		if _, ok := errors.AsType[*commandError](err); ok {
+			return nil, fmt.Errorf("%w: %s", ErrTreeNotFound, treePath)
 		}
-		return nil, fmt.Errorf("git %s: %w", args[0], err)
+		return nil, err
 	}
-	return output, nil
+	return entries, nil
 }
 
 func validateTreePath(value string) error {
