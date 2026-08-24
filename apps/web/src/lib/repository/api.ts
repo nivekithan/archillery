@@ -54,12 +54,26 @@ export const getRepositoryTreeFromWorker = createServerOnlyFn(
     if (branch) treeUrl.searchParams.set('branch', branch)
     if (path) treeUrl.searchParams.set('path', path)
 
-    const response = await env.GIT_WORKER.fetch(treeUrl)
-    const tree = TreeResponseSchema.safeParse(await readWorkerJson(response))
-    if (!tree.success) {
-      throw new Error('Repository service returned an invalid response')
-    }
+    try {
+      const response = await env.GIT_WORKER.fetch(treeUrl)
+      const tree = TreeResponseSchema.safeParse(await readWorkerJson(response))
+      if (!tree.success) {
+        throw new Error('Repository service returned an invalid response')
+      }
 
-    return tree.data
+      return {
+        status: 'success' as const,
+        entries: tree.data.entries,
+      }
+    } catch (error) {
+      if (
+        path &&
+        error instanceof Error &&
+        error.message === 'directory not found'
+      ) {
+        return { status: 'directory-not-found' as const }
+      }
+      throw error
+    }
   },
 )

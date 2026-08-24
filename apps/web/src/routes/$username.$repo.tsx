@@ -80,8 +80,8 @@ function Repository() {
   const { repo, username } = Route.useParams();
   const navigate = Route.useNavigate();
   const { branch, path } = Route.useSearch();
-  const { branches, defaultBranch, entries, selectedBranch } =
-    Route.useLoaderData();
+  const repository = Route.useLoaderData();
+  const { branches, defaultBranch, selectedBranch } = repository;
   const pathSegments = path?.split("/") ?? [];
   const parentPath = pathSegments.slice(0, -1).join("/") || undefined;
 
@@ -103,7 +103,7 @@ function Repository() {
     void navigate({
       search: {
         branch: value === defaultBranch ? undefined : value,
-        path: undefined,
+        path,
       },
     });
   }
@@ -226,7 +226,31 @@ function Repository() {
           </Breadcrumb>
         </div>
 
-        {entries.length === 0 ? (
+        {repository.status === "directory-not-found" ? (
+          <Empty className="min-h-72 border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <FolderIcon weight="fill" className="size-5 text-accent" />
+              </EmptyMedia>
+              <EmptyTitle>Directory not found</EmptyTitle>
+              <EmptyDescription>
+                The directory <span className="font-medium">{path}</span> does
+                not exist on branch{' '}
+                <span className="font-medium">{selectedBranch}</span>.
+              </EmptyDescription>
+            </EmptyHeader>
+            <Button
+              variant="outline"
+              onPress={() =>
+                navigate({
+                  search: { branch, path: undefined },
+                })
+              }
+            >
+              View branch root
+            </Button>
+          </Empty>
+        ) : repository.entries.length === 0 ? (
           <Empty className="min-h-72 border">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -265,7 +289,7 @@ function Repository() {
                     <TableCell />
                   </TableRow>
                 )}
-                {entries.map((entry) => (
+                {repository.entries.map((entry) => (
                   <TableRow key={entry.path} id={entry.path}>
                     <TableCell className="font-medium">
                       {entry.type === "tree" ? (

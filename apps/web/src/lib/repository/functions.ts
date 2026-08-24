@@ -30,7 +30,7 @@ export const getRepository = createServerFn({ method: 'GET' })
     return {
       branches: repository.branches,
       defaultBranch: repository.defaultBranch,
-      entries: tree.entries,
       selectedBranch: data.branch ?? repository.defaultBranch,
+      ...tree,
     }
   })
