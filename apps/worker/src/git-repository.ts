@@ -339,14 +339,21 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       return;
     }
 
-    console.info("Deleting idle Git sandbox", {
+    if (sandbox.status === "pending" || sandbox.status === "running") {
+      console.info("Stopping idle Git sandbox", {
+        sandboxId: sandbox.id,
+        status: sandbox.status,
+      });
+      await sandbox.stop();
+      this.cacheArchilSandbox(sandbox);
+      console.info("Idle Git sandbox stopped", { sandboxId: sandbox.id });
+      return;
+    }
+
+    console.info("Git sandbox is already inactive", {
       sandboxId: sandbox.id,
       status: sandbox.status,
     });
-    await sandbox.delete();
-    this.cachedArchilSandbox = null;
-    this.ctx.storage.kv.delete(GitRepository.SANDBOX_STATE_KEY);
-    console.info("Idle Git sandbox deleted", { sandboxId: sandbox.id });
     return;
   }
 
