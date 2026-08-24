@@ -101,7 +101,13 @@ function Repository() {
   const parentPath = pathSegments.slice(0, -1).join("/") || undefined;
 
   function selectBranch(value: string | number | null) {
-    if (typeof value !== "string" || value === selectedBranch) return;
+    if (
+      typeof value !== "string" ||
+      value === ref ||
+      value === selectedBranch
+    ) {
+      return;
+    }
     void navigate({
       search: {
         branch: value === defaultBranch ? undefined : value,
@@ -115,7 +121,7 @@ function Repository() {
     <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Combobox
-            value={ref ? ref.slice(0, 7) : selectedBranch}
+            value={ref ?? selectedBranch}
             onChange={selectBranch}
             allowsEmptyCollection
             menuTrigger="focus"
@@ -135,6 +141,13 @@ function Repository() {
                   <ComboboxEmpty>No branches found.</ComboboxEmpty>
                 )}
               >
+                {ref && (
+                  <ComboboxItem
+                    id={ref}
+                    textValue={ref.slice(0, 7)}
+                    className="hidden"
+                  />
+                )}
                 {branches.map((item) => (
                   <ComboboxItem key={item} id={item} textValue={item}>
                     <span className="truncate">{item}</span>
