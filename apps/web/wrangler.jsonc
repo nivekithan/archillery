@@ -7,10 +7,16 @@
   "services": [
     {
       "binding": "GIT_WORKER",
-      "service": "git-cloudflare"
-    }
+      "service": "git-cloudflare",
+    },
   ],
   "observability": {
-    "enabled": true
-  }
+    "enabled": true,
+  },
+  "routes": [
+    {
+      "pattern": "git.nivekithan.com",
+      "custom_domain": true,
+    },
+  ],
 }
