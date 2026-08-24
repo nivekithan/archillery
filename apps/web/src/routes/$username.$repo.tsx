@@ -2,10 +2,11 @@ import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { RepositoryHeader } from "@/components/repository-header";
-import { BranchNameSchema } from "@/lib/repository/schemas";
+import { BranchNameSchema, CommitHashSchema } from "@/lib/repository/schemas";
 
 const RepositorySearchSchema = z.object({
   branch: BranchNameSchema.optional().catch(undefined),
+  ref: CommitHashSchema.optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/$username/$repo")({
@@ -15,11 +16,16 @@ export const Route = createFileRoute("/$username/$repo")({
 
 function RepositoryLayout() {
   const { repo, username } = Route.useParams();
-  const { branch } = Route.useSearch();
+  const { branch, ref } = Route.useSearch();
 
   return (
     <div className="min-h-screen bg-background">
-      <RepositoryHeader branch={branch} repo={repo} username={username} />
+      <RepositoryHeader
+        branch={branch}
+        ref={ref}
+        repo={repo}
+        username={username}
+      />
       <Outlet />
     </div>
   );

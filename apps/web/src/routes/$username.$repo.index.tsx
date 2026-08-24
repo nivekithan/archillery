@@ -43,11 +43,10 @@ import {
 } from "@/components/ui/table";
 import { formatRelativeTime, formatSize } from "@/lib/repository/format";
 import { getRepository } from "@/lib/repository/functions";
-import { CommitHashSchema, TreePathSchema } from "@/lib/repository/schemas";
+import { TreePathSchema } from "@/lib/repository/schemas";
 
 const RepositorySearchSchema = z.object({
   path: TreePathSchema.optional().catch(undefined),
-  ref: CommitHashSchema.optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/$username/$repo/")({
@@ -263,7 +262,7 @@ function Repository() {
               <Link
                 to="/$username/$repo/commits"
                 params={{ repo, username }}
-                search={{ branch }}
+                search={{ branch: ref ? undefined : branch, ref }}
                 className="ml-2 flex items-center gap-1.5 font-medium text-foreground transition-colors hover:underline"
               >
                 <GitCommitIcon className="size-4" />

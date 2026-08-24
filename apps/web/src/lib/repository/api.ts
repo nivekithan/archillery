@@ -102,16 +102,19 @@ export const getRepositoryTreeFromWorker = createServerOnlyFn(
 export const getRepositoryCommitsFromWorker = createServerOnlyFn(
   async ({
     branch,
+    ref,
     repo,
     username,
   }: {
     branch?: string;
+    ref?: string;
     repo: string;
     username: string;
   }) => {
     const commitsUrl = new URL("https://git-worker");
     commitsUrl.pathname = `/api/repositories/${username}/${repo}/commits`;
     if (branch) commitsUrl.searchParams.set("branch", branch);
+    if (ref) commitsUrl.searchParams.set("ref", ref);
 
     const response = await env.GIT_WORKER.fetch(commitsUrl);
     const commits = CommitsResponseSchema.safeParse(

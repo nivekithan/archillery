@@ -12,12 +12,14 @@ import { Button } from "@/components/ui/button";
 
 type RepositoryHeaderProps = {
   branch?: string;
+  ref?: string;
   repo: string;
   username: string;
 };
 
 export function RepositoryHeader({
   branch,
+  ref,
   repo,
   username,
 }: RepositoryHeaderProps) {
@@ -63,7 +65,7 @@ export function RepositoryHeader({
           <Link
             to="/$username/$repo"
             params={{ repo, username }}
-            search={{ branch, path: undefined, ref: undefined }}
+            search={{ branch: ref ? undefined : branch, path: undefined, ref }}
             activeOptions={{ exact: true, includeSearch: false }}
             className="flex items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground data-[status=active]:border-accent data-[status=active]:font-semibold data-[status=active]:text-foreground"
           >

@@ -31,11 +31,12 @@ import { formatRelativeTime } from "@/lib/repository/format";
 import { getRepositoryCommits } from "@/lib/repository/functions";
 
 export const Route = createFileRoute("/$username/$repo/commits")({
-  loaderDeps: ({ search }) => ({ branch: search.branch }),
+  loaderDeps: ({ search }) => ({ branch: search.branch, ref: search.ref }),
   loader: async ({ deps, params }) => {
     const repository = await getRepositoryCommits({
       data: {
-        branch: deps.branch,
+        branch: deps.ref ? undefined : deps.branch,
+        ref: deps.ref,
         repo: params.repo,
         username: params.username,
       },
@@ -59,16 +60,17 @@ export const Route = createFileRoute("/$username/$repo/commits")({
 function Commits() {
   const { repo, username } = Route.useParams();
   const navigate = Route.useNavigate();
-  const { branch } = Route.useSearch();
+  const { branch, ref } = Route.useSearch();
   const { branches, commits, defaultBranch, loadedAt } = Route.useLoaderData();
   const currentBranch = branch ?? defaultBranch;
   const commitGroups = groupCommitsByDate(commits);
 
   function selectBranch(value: string | number | null) {
-    if (typeof value !== "string") return;
+    if (typeof value !== "string" || value === ref) return;
     void navigate({
       search: {
         branch: value === defaultBranch ? undefined : value,
+        ref: undefined,
       },
     });
   }
@@ -86,7 +88,7 @@ function Commits() {
     <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6">
       <div className="border-b pb-4">
         <Combobox
-          value={currentBranch}
+          value={ref ?? currentBranch}
           onChange={selectBranch}
           allowsEmptyCollection
           menuTrigger="focus"
@@ -106,6 +108,13 @@ function Commits() {
                 <ComboboxEmpty>No branches found.</ComboboxEmpty>
               )}
             >
+              {ref && (
+                <ComboboxItem
+                  id={ref}
+                  textValue={ref.slice(0, 7)}
+                  className="hidden"
+                />
+              )}
               {branches.map((item) => (
                 <ComboboxItem key={item} id={item} textValue={item}>
                   <span className="truncate">{item}</span>

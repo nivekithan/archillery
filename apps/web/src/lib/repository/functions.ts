@@ -43,6 +43,7 @@ export const getRepository = createServerFn({ method: "GET" })
 
 const RepositoryCommitsInputSchema = z.object({
   branch: BranchNameSchema.optional(),
+  ref: CommitHashSchema.optional(),
   repo: RepositoryNameSchema,
   username: UsernameSchema,
 });
