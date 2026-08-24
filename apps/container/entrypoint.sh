@@ -55,13 +55,12 @@ mounted=true
 chown www-data:www-data /var/lib/git
 
 echo "Preparing Git repository"
-if [ ! -f "$repository/HEAD" ] || [ ! -f "$repository/config" ]; then
+if [ ! -f "$repository/HEAD" ]; then
   runuser -u www-data -- git init --bare --initial-branch=main "$repository"
+  runuser -u www-data -- git --git-dir="$repository" config core.fsync all
+  runuser -u www-data -- git --git-dir="$repository" config core.fsyncMethod fsync
+  runuser -u www-data -- git --git-dir="$repository" config http.receivepack true
 fi
-
-runuser -u www-data -- git -C "$repository" config core.fsync all
-runuser -u www-data -- git -C "$repository" config core.fsyncMethod fsync
-runuser -u www-data -- git -C "$repository" config http.receivepack true
 
 htpasswd -bc /etc/apache2/origin.htpasswd origin "$ORIGIN_TOKEN"
 

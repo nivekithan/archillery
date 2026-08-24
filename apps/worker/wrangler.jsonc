@@ -15,7 +15,7 @@
     "GIT_USERNAME": "nivekithan",
     "ARCHIL_META_DISK": "dsk-00000000000642d2",
     "ARCHIL_REGION": "aws-us-east-1",
-    "ARCHIL_SANDBOX_IMAGE": "ghcr.io/nivekithan/archillery@sha256:358121fb2adcce92b4d2fa4ccfdd24ed9d5e4617bdabb4e392492ec0cbb707fa",
+    "ARCHIL_SANDBOX_IMAGE": "ghcr.io/nivekithan/archillery@sha256:237b80d0f94bbd23644a40d46d703db4ac234758365b50fdb1f3e95df95fefe7",
     "GIT_IDLE_TIMEOUT_SECONDS": 900,
   },
   "secrets": {
