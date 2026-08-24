@@ -16,6 +16,14 @@ const SandboxStateSchema = z.object({
   hostname: z.string().nonempty(),
 });
 
+type GitGatewayOptions = {
+  diskId: string;
+  mountToken: string;
+  originToken: string;
+  repoName: string;
+  repoUsername: string;
+};
+
 const CREATE_GIT_GATEWAY_COMMAND = [
   "archil-sandbox services create",
   '--env ARCHIL_DISK_ID="$ARCHIL_DISK_ID"',
@@ -37,6 +45,7 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
   private readonly archil: Archil;
   private readonly idleTimeoutMs: number;
   private cachedArchilSandbox: { sandbox: Sandbox; expiresAt: number } | null;
+  private pendingGitGateway: Promise<string> | null;
 
   constructor(ctx: DurableObjectState, env: CloudflareBindings) {
     super(ctx, env);
@@ -46,87 +55,91 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     });
     this.idleTimeoutMs = env.GIT_IDLE_TIMEOUT_SECONDS * 1000;
     this.cachedArchilSandbox = null;
+    this.pendingGitGateway = null;
   }
 
-  async getGitGatewayHost({
+  async getGitGatewayHost(options: GitGatewayOptions) {
+    const { diskId, repoName, repoUsername } = options;
+    console.info("Resolving Git sandbox", { diskId, repoName, repoUsername });
+    const pendingGitGateway = (this.pendingGitGateway ??=
+      this.createOrReuseGitGateway(options));
+
+    let hostname: string;
+    try {
+      hostname = await pendingGitGateway;
+    } finally {
+      if (this.pendingGitGateway === pendingGitGateway) {
+        this.pendingGitGateway = null;
+      }
+    }
+
+    await this.ping();
+    return hostname;
+  }
+
+  private async createOrReuseGitGateway({
     diskId,
     mountToken,
     originToken,
     repoName,
     repoUsername,
-  }: {
-    diskId: string;
-    mountToken: string;
-    originToken: string;
-    repoName: string;
-    repoUsername: string;
-  }) {
-    console.info("Resolving Git sandbox", { diskId, repoName, repoUsername });
-    const sandboxEnv = {
+  }: GitGatewayOptions) {
+    const currentSandbox = this.getSandboxState();
+
+    if (currentSandbox) {
+      console.info("Found stored sandbox state", {
+        hostname: currentSandbox.hostname,
+        sandboxId: currentSandbox.sandboxId,
+      });
+      const sandbox = await this.getCachedArchilSandbox(
+        currentSandbox.sandboxId,
+      );
+
+      if (sandbox) {
+        console.info("Reusing Git sandbox", {
+          hostname: currentSandbox.hostname,
+          sandboxId: currentSandbox.sandboxId,
+          status: sandbox.status,
+        });
+        return currentSandbox.hostname;
+      }
+
+      console.warn("Stored Git sandbox no longer exists", {
+        sandboxId: currentSandbox.sandboxId,
+      });
+    }
+
+    console.info("Creating Git sandbox", { diskId, repoName, repoUsername });
+    const sandbox = await this.archil.sandboxes.create(
+      {
+        name: `${repoUsername}-${repoName}`.toLowerCase().replaceAll("_", "-"),
+        baseImage: this.env.ARCHIL_SANDBOX_IMAGE,
+        vcpuCount: 2,
+        memSizeMiB: 4096,
+        maxTtlSeconds: GitRepository.MAX_TTL,
+      },
+      { wait: true },
+    );
+    console.info("Git sandbox created", {
+      sandboxId: sandbox.id,
+      status: sandbox.status,
+    });
+
+    const hostname = await this.createGitGateway(sandbox, {
       ARCHIL_DISK_ID: diskId,
       ARCHIL_MOUNT_TOKEN: mountToken,
       ARCHIL_REGION: this.env.ARCHIL_REGION,
       ORIGIN_TOKEN: originToken,
       REPO_NAME: repoName,
       REPO_USERNAME: repoUsername,
-    };
-
-    const hostname = await this.ctx.blockConcurrencyWhile(async () => {
-      const currentSandbox = this.getSandboxState();
-
-      if (currentSandbox) {
-        console.info("Found stored sandbox state", {
-          hostname: currentSandbox.hostname,
-          sandboxId: currentSandbox.sandboxId,
-        });
-        const sandbox = await this.getCachedArchilSandbox(
-          currentSandbox.sandboxId,
-        );
-
-        if (sandbox) {
-          console.info("Reusing Git sandbox", {
-            hostname: currentSandbox.hostname,
-            sandboxId: currentSandbox.sandboxId,
-            status: sandbox.status,
-          });
-          return currentSandbox.hostname;
-        }
-
-        console.warn("Stored Git sandbox no longer exists", {
-          sandboxId: currentSandbox.sandboxId,
-        });
-      }
-
-      console.info("Creating Git sandbox", { diskId, repoName, repoUsername });
-      const sandbox = await this.archil.sandboxes.create(
-        {
-          name: `${repoUsername}-${repoName}`
-            .toLowerCase()
-            .replaceAll("_", "-"),
-          baseImage: this.env.ARCHIL_SANDBOX_IMAGE,
-          vcpuCount: 2,
-          memSizeMiB: 4096,
-          maxTtlSeconds: GitRepository.MAX_TTL,
-        },
-        { wait: true },
-      );
-      console.info("Git sandbox created", {
-        sandboxId: sandbox.id,
-        status: sandbox.status,
-      });
-
-      const hostname = await this.createGitGateway(sandbox, sandboxEnv);
-
-      this.setSandboxState({ sandboxId: sandbox.id, hostname });
-      this.cacheArchilSandbox(sandbox);
-      console.info("Git sandbox is ready", {
-        hostname,
-        sandboxId: sandbox.id,
-      });
-      return hostname;
     });
 
-    await this.ping();
+    this.setSandboxState({ sandboxId: sandbox.id, hostname });
+    this.cacheArchilSandbox(sandbox);
+    console.info("Git sandbox is ready", {
+      hostname,
+      sandboxId: sandbox.id,
+    });
     return hostname;
   }
 
@@ -167,9 +180,9 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       const service = await sandbox.exec(CREATE_GIT_GATEWAY_COMMAND, {
         env,
       });
-      if (service.exitCode !== 0) {
+      if (service.status !== "completed" || service.exitCode !== 0) {
         throw new Error(
-          `Failed to create Git gateway: ${service.stderr}`,
+          `Failed to create Git gateway: ${service.stderr || service.exitReason || `exit code ${String(service.exitCode)}`}`,
         );
       }
 
