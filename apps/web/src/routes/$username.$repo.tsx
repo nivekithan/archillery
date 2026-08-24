@@ -19,11 +19,7 @@ function RepositoryLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <RepositoryHeader
-        branch={branch}
-        repo={repo}
-        username={username}
-      />
+      <RepositoryHeader branch={branch} repo={repo} username={username} />
       <Outlet />
     </div>
   );

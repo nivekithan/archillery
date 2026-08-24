@@ -1,18 +1,19 @@
-import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 import {
   getRepositoryCommitsFromWorker,
   getRepositoryMetadataFromWorker,
+  getRepositorySummaryFromWorker,
   getRepositoryTreeFromWorker,
-} from './api'
+} from "./api";
 import {
   BranchNameSchema,
   CommitHashSchema,
   RepositoryNameSchema,
   TreePathSchema,
   UsernameSchema,
-} from './schemas'
+} from "./schemas";
 
 const RepositoryInputSchema = z.object({
   branch: BranchNameSchema.optional(),
@@ -20,36 +21,39 @@ const RepositoryInputSchema = z.object({
   ref: CommitHashSchema.optional(),
   repo: RepositoryNameSchema,
   username: UsernameSchema,
-})
+});
 
-export const getRepository = createServerFn({ method: 'GET' })
+export const getRepository = createServerFn({ method: "GET" })
   .validator(RepositoryInputSchema)
   .handler(async ({ data }) => {
-    const [repository, tree] = await Promise.all([
+    const [repository, summary, tree] = await Promise.all([
       getRepositoryMetadataFromWorker(data),
+      // TODO: Make it streaming promise
+      getRepositorySummaryFromWorker(data),
       getRepositoryTreeFromWorker(data),
-    ])
+    ]);
 
     return {
       branches: repository.branches,
       defaultBranch: repository.defaultBranch,
+      ...summary,
       ...tree,
-    }
-  })
+    };
+  });
 
 const RepositoryCommitsInputSchema = z.object({
   branch: BranchNameSchema.optional(),
   repo: RepositoryNameSchema,
   username: UsernameSchema,
-})
+});
 
-export const getRepositoryCommits = createServerFn({ method: 'GET' })
+export const getRepositoryCommits = createServerFn({ method: "GET" })
   .validator(RepositoryCommitsInputSchema)
   .handler(async ({ data }) => {
     const [repository, commits] = await Promise.all([
       getRepositoryMetadataFromWorker(data),
       getRepositoryCommitsFromWorker(data),
-    ])
+    ]);
 
-    return { ...repository, commits }
-  })
+    return { ...repository, commits };
+  });

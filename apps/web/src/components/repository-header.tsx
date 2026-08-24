@@ -3,7 +3,6 @@ import {
   BookBookmarkIcon,
   ClipboardIcon,
   CodeIcon,
-  GitCommitIcon,
   LockKeyOpenIcon,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -70,16 +69,6 @@ export function RepositoryHeader({
           >
             <CodeIcon className="size-4" />
             Code
-          </Link>
-          <Link
-            to="/$username/$repo/commits"
-            params={{ repo, username }}
-            search={{ branch }}
-            activeOptions={{ exact: true, includeSearch: false }}
-            className="flex items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground data-[status=active]:border-accent data-[status=active]:font-semibold data-[status=active]:text-foreground"
-          >
-            <GitCommitIcon className="size-4" />
-            Commits
           </Link>
         </nav>
       </div>

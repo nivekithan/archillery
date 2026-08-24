@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -98,6 +99,18 @@ func (c *commands) commits(ctx context.Context, ref string, limit int) ([]Commit
 		return nil, err
 	}
 	return parseCommits(output)
+}
+
+func (c *commands) commitCount(ctx context.Context, ref string) (int64, error) {
+	output, err := c.output(ctx, "rev-list", "--count", ref)
+	if err != nil {
+		return 0, err
+	}
+	count, err := strconv.ParseInt(strings.TrimSpace(string(output)), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse commit count: %w", err)
+	}
+	return count, nil
 }
 
 func (c *commands) output(ctx context.Context, args ...string) ([]byte, error) {

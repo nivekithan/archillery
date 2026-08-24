@@ -4,6 +4,7 @@ import {
   FileIcon,
   FolderIcon,
   GitBranchIcon,
+  GitCommitIcon,
   GitForkIcon,
 } from "@phosphor-icons/react";
 import { z } from "zod";
@@ -40,7 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatSize } from "@/lib/repository/format";
+import { formatRelativeTime, formatSize } from "@/lib/repository/format";
 import { getRepository } from "@/lib/repository/functions";
 import { CommitHashSchema, TreePathSchema } from "@/lib/repository/schemas";
 
@@ -68,6 +69,7 @@ export const Route = createFileRoute("/$username/$repo/")({
     });
     return {
       ...repository,
+      loadedAt: Date.now(),
       selectedBranch: deps.branch ?? repository.defaultBranch,
     };
   },
@@ -87,7 +89,14 @@ function Repository() {
   const navigate = Route.useNavigate();
   const { branch, path, ref } = Route.useSearch();
   const repository = Route.useLoaderData();
-  const { branches, defaultBranch, selectedBranch } = repository;
+  const {
+    branches,
+    defaultBranch,
+    latestCommit,
+    loadedAt,
+    selectedBranch,
+    totalCommits,
+  } = repository;
   const pathSegments = path?.split("/") ?? [];
   const parentPath = pathSegments.slice(0, -1).join("/") || undefined;
 
@@ -224,6 +233,41 @@ function Repository() {
           </Empty>
         ) : (
           <div className="overflow-hidden rounded-lg border bg-card">
+            <div className="flex min-h-11 flex-col gap-2 border-b bg-muted/30 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 font-semibold">
+                  {latestCommit.authorName}
+                </span>
+                <Link
+                  to="/$username/$repo"
+                  params={{ repo, username }}
+                  search={{
+                    branch: undefined,
+                    path: undefined,
+                    ref: latestCommit.hash,
+                  }}
+                  className="truncate text-muted-foreground transition-colors hover:text-foreground hover:underline"
+                >
+                  {latestCommit.message}
+                </Link>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                <code>{latestCommit.shortHash}</code>
+                <span aria-hidden="true">·</span>
+                <span>
+                  {formatRelativeTime(latestCommit.committedAt, loadedAt)}
+                </span>
+                <Link
+                  to="/$username/$repo/commits"
+                  params={{ repo, username }}
+                  search={{ branch }}
+                  className="ml-2 flex items-center gap-1.5 font-medium text-foreground transition-colors hover:underline"
+                >
+                  <GitCommitIcon className="size-4" />
+                  {totalCommits} {totalCommits === 1 ? "Commit" : "Commits"}
+                </Link>
+              </div>
+            </div>
             <Table aria-label={`Files in ${path || repo}`}>
               <TableHeader className="sr-only">
                 <TableHead isRowHeader>Name</TableHead>

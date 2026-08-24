@@ -40,7 +40,7 @@ func parseCommits(output []byte) ([]Commit, error) {
 			Hash:        fields[0],
 			ShortHash:   fields[1],
 			Message:     fields[2],
-			AuthorName:  fields[3],
+			AuthorName:  strings.ToLower(fields[3]),
 			AuthorEmail: fields[4],
 			CommittedAt: fields[5],
 		})

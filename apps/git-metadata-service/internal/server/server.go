@@ -32,6 +32,7 @@ func New(config Config) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/repository", handle(s.repositoryMetadata))
 	mux.HandleFunc("GET /api/v1/commits", handle(s.commits))
+	mux.HandleFunc("GET /api/v1/summary", handle(s.summary))
 	mux.HandleFunc("GET /api/v1/tree", handle(s.tree))
 	return mux
 }
@@ -75,6 +76,18 @@ func (s *server) commits(request *http.Request) (commitsResponse, int, error) {
 		return commitsResponse{}, 0, err
 	}
 	return commitsResponse{Commits: commits}, http.StatusOK, nil
+}
+
+func (s *server) summary(request *http.Request) (git.RepositorySummary, int, error) {
+	summary, err := s.repository.Summary(
+		request.Context(),
+		request.URL.Query().Get("branch"),
+		request.URL.Query().Get("ref"),
+	)
+	if err != nil {
+		return git.RepositorySummary{}, 0, err
+	}
+	return summary, http.StatusOK, nil
 }
 
 func (s *server) tree(request *http.Request) (treeResponse, int, error) {

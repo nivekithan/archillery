@@ -6,6 +6,7 @@ import (
 	"fmt"
 	pathpkg "path"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -64,6 +65,45 @@ func (r *Repository) Commits(ctx context.Context, branch, commit string, limit i
 		return nil, fmt.Errorf("list commits: %w", err)
 	}
 	return commits, nil
+}
+
+type RepositorySummary struct {
+	LatestCommit Commit `json:"latestCommit"`
+	TotalCommits int64  `json:"totalCommits"`
+}
+
+func (r *Repository) Summary(ctx context.Context, branch, commit string) (RepositorySummary, error) {
+	ref, err := r.revisionRef(ctx, branch, commit)
+	if err != nil {
+		return RepositorySummary{}, err
+	}
+
+	var commits []Commit
+	var commitsErr error
+	var totalCommits int64
+	var totalCommitsErr error
+	var waitGroup sync.WaitGroup
+	waitGroup.Go(func() {
+		commits, commitsErr = r.commands.commits(ctx, ref, 1)
+	})
+	waitGroup.Go(func() {
+		totalCommits, totalCommitsErr = r.commands.commitCount(ctx, ref)
+	})
+	waitGroup.Wait()
+
+	if commitsErr != nil {
+		return RepositorySummary{}, fmt.Errorf("read latest commit: %w", commitsErr)
+	}
+	if len(commits) != 1 {
+		return RepositorySummary{}, errors.New("latest commit not found")
+	}
+	if totalCommitsErr != nil {
+		return RepositorySummary{}, fmt.Errorf("count commits: %w", totalCommitsErr)
+	}
+	return RepositorySummary{
+		LatestCommit: commits[0],
+		TotalCommits: totalCommits,
+	}, nil
 }
 
 func (r *Repository) Tree(ctx context.Context, branch, commit, treePath string) ([]TreeEntry, error) {
