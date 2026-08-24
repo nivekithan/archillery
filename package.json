@@ -5,8 +5,6 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --filter=!@git-cloudflare/git-metadata-service",
-    "dev:apps": "turbo run dev --filter=@git-cloudflare/worker --filter=@git-cloudflare/web",
-    "dev:services": "turbo run dev --filter=@git-cloudflare/container",
     "deploy": "turbo run deploy",
     "cf-typegen": "turbo run cf-typegen"
   },
