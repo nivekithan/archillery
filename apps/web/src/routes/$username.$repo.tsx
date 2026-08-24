@@ -1,4 +1,4 @@
-import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
+import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import {
   ArrowsClockwiseIcon,
   BookBookmarkIcon,
@@ -9,25 +9,34 @@ import {
   GitBranchIcon,
   GitForkIcon,
   LockKeyOpenIcon,
-} from '@phosphor-icons/react'
-import { toast } from 'sonner'
-import { z } from 'zod'
+} from "@phosphor-icons/react";
+import { toast } from "sonner";
+import { z } from "zod";
 
-import { Badge } from '@/components/ui/badge'
+import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbList,
   BreadcrumbPage,
-} from '@/components/ui/breadcrumb'
-import { Button } from '@/components/ui/button'
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty'
+} from "@/components/ui/empty";
+import { InputGroupAddon } from "@/components/ui/input-group";
 import {
   Table,
   TableBody,
@@ -35,20 +44,22 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { getRepository } from '@/lib/repository/functions'
-import { TreePathSchema } from '@/lib/repository/schemas'
+} from "@/components/ui/table";
+import { getRepository } from "@/lib/repository/functions";
+import { BranchNameSchema, TreePathSchema } from "@/lib/repository/schemas";
 
 const RepositorySearchSchema = z.object({
+  branch: BranchNameSchema.optional().catch(undefined),
   path: TreePathSchema.optional().catch(undefined),
-})
+});
 
-export const Route = createFileRoute('/$username/$repo')({
+export const Route = createFileRoute("/$username/$repo")({
   validateSearch: RepositorySearchSchema,
-  loaderDeps: ({ search }) => ({ path: search.path }),
+  loaderDeps: ({ search }) => ({ branch: search.branch, path: search.path }),
   loader: ({ deps, params }) =>
     getRepository({
       data: {
+        branch: deps.branch,
         path: deps.path,
         repo: params.repo,
         username: params.username,
@@ -57,29 +68,44 @@ export const Route = createFileRoute('/$username/$repo')({
   head: ({ loaderData, params }) => ({
     meta: [
       {
-        title: `${params.username}/${params.repo} - ${loaderData?.defaultBranch ?? 'Repository'}`,
+        title: `${params.username}/${params.repo} - ${loaderData?.selectedBranch ?? "Repository"}`,
       },
     ],
   }),
   errorComponent: RepositoryError,
   component: Repository,
-})
+});
 
 function Repository() {
-  const { repo, username } = Route.useParams()
-  const { path } = Route.useSearch()
-  const { defaultBranch, entries } = Route.useLoaderData()
-  const pathSegments = path?.split('/') ?? []
-  const parentPath = pathSegments.slice(0, -1).join('/') || undefined
+  const { repo, username } = Route.useParams();
+  const navigate = Route.useNavigate();
+  const { branch, path } = Route.useSearch();
+  const { branches, defaultBranch, entries, selectedBranch } =
+    Route.useLoaderData();
+  const pathSegments = path?.split("/") ?? [];
+  const parentPath = pathSegments.slice(0, -1).join("/") || undefined;
 
   async function copyCloneUrl() {
-    const cloneUrl = new URL(`/${username}/${repo}.git`, window.location.origin)
+    const cloneUrl = new URL(
+      `/${username}/${repo}.git`,
+      window.location.origin,
+    );
     try {
-      await navigator.clipboard.writeText(cloneUrl.href)
-      toast.success('Clone URL copied')
+      await navigator.clipboard.writeText(cloneUrl.href);
+      toast.success("Clone URL copied");
     } catch {
-      toast.error('Could not copy clone URL')
+      toast.error("Could not copy clone URL");
     }
+  }
+
+  function selectBranch(value: string | number | null) {
+    if (typeof value !== "string" || value === selectedBranch) return;
+    void navigate({
+      search: {
+        branch: value === defaultBranch ? undefined : value,
+        path: undefined,
+      },
+    });
   }
 
   return (
@@ -122,14 +148,40 @@ function Repository() {
 
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Badge variant="outline" className="w-fit rounded-lg px-3 py-1.5">
-            <GitBranchIcon
-              data-icon="inline-start"
-              className="text-muted-foreground"
-            />
-            <span className="text-muted-foreground">branch:</span>
-            {defaultBranch}
-          </Badge>
+          <Combobox
+            value={selectedBranch}
+            onChange={selectBranch}
+            allowsEmptyCollection
+            menuTrigger="focus"
+          >
+            <ComboboxInput
+              aria-label="Branch"
+              placeholder="Find a branch"
+              className="w-fit min-w-28 max-w-64 [&_[data-slot=input-group-control]]:w-auto [&_[data-slot=input-group-control]]:[field-sizing:content]"
+            >
+              <InputGroupAddon>
+                <GitBranchIcon />
+              </InputGroupAddon>
+            </ComboboxInput>
+            <ComboboxContent className="w-72">
+              <ComboboxList
+                renderEmptyState={() => (
+                  <ComboboxEmpty>No branches found.</ComboboxEmpty>
+                )}
+              >
+                {branches.map((item) => (
+                  <ComboboxItem key={item} id={item} textValue={item}>
+                    <span className="truncate">{item}</span>
+                    {item === defaultBranch && (
+                      <Badge variant="outline" className="ml-auto">
+                        default
+                      </Badge>
+                    )}
+                  </ComboboxItem>
+                ))}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
 
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="text-base">
@@ -140,7 +192,7 @@ function Repository() {
                   <Link
                     to="/$username/$repo"
                     params={{ repo, username }}
-                    search={{ path: undefined }}
+                    search={{ branch, path: undefined }}
                     className="font-semibold transition-colors hover:text-foreground"
                   >
                     /
@@ -148,8 +200,8 @@ function Repository() {
                 )}
               </BreadcrumbItem>
               {pathSegments.map((segment, index) => {
-                const segmentPath = pathSegments.slice(0, index + 1).join('/')
-                const isCurrent = index === pathSegments.length - 1
+                const segmentPath = pathSegments.slice(0, index + 1).join("/");
+                const isCurrent = index === pathSegments.length - 1;
 
                 return (
                   <BreadcrumbItem key={segmentPath}>
@@ -161,14 +213,14 @@ function Repository() {
                       <Link
                         to="/$username/$repo"
                         params={{ repo, username }}
-                        search={{ path: segmentPath }}
+                        search={{ branch, path: segmentPath }}
                         className="transition-colors hover:text-foreground"
                       >
                         {segment}
                       </Link>
                     )}
                   </BreadcrumbItem>
-                )
+                );
               })}
             </BreadcrumbList>
           </Breadcrumb>
@@ -200,7 +252,7 @@ function Repository() {
                       <Link
                         to="/$username/$repo"
                         params={{ repo, username }}
-                        search={{ path: parentPath }}
+                        search={{ branch, path: parentPath }}
                         className="flex items-center gap-3 hover:text-accent hover:underline"
                       >
                         <FolderIcon
@@ -216,11 +268,11 @@ function Repository() {
                 {entries.map((entry) => (
                   <TableRow key={entry.path} id={entry.path}>
                     <TableCell className="font-medium">
-                      {entry.type === 'tree' ? (
+                      {entry.type === "tree" ? (
                         <Link
                           to="/$username/$repo"
                           params={{ repo, username }}
-                          search={{ path: entry.path }}
+                          search={{ branch, path: entry.path }}
                           className="flex items-center gap-3 hover:text-accent hover:underline"
                         >
                           <FolderIcon
@@ -250,11 +302,11 @@ function Repository() {
         )}
       </main>
     </div>
-  )
+  );
 }
 
 function RepositoryError({ error }: { error: Error }) {
-  const router = useRouter()
+  const router = useRouter();
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-4 py-12 sm:px-6">
@@ -272,12 +324,12 @@ function RepositoryError({ error }: { error: Error }) {
         </Button>
       </Empty>
     </main>
-  )
+  );
 }
 
 function formatSize(size?: number) {
-  if (size === undefined) return '-'
-  if (size < 1_000) return `${size} B`
-  if (size < 1_000_000) return `${(size / 1_000).toFixed(1)} KB`
-  return `${(size / 1_000_000).toFixed(1)} MB`
+  if (size === undefined) return "-";
+  if (size < 1_000) return `${size} B`;
+  if (size < 1_000_000) return `${(size / 1_000).toFixed(1)} KB`;
+  return `${(size / 1_000_000).toFixed(1)} MB`;
 }

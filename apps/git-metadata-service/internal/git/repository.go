@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	ErrInvalidPath  = errors.New("invalid path")
-	ErrTreeNotFound = errors.New("tree not found")
+	ErrBranchNotFound = errors.New("branch not found")
+	ErrInvalidPath    = errors.New("invalid path")
+	ErrTreeNotFound   = errors.New("tree not found")
 )
 
 type Repository struct {
@@ -32,14 +33,47 @@ func (r *Repository) DefaultBranch(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-func (r *Repository) Tree(ctx context.Context, treePath string) ([]TreeEntry, error) {
+func (r *Repository) Branches(ctx context.Context, defaultBranch string) ([]string, error) {
+	output, err := r.output(ctx, "for-each-ref", "--format=%(refname:short)", "--sort=refname", "refs/heads")
+	if err != nil {
+		return nil, fmt.Errorf("list branches: %w", err)
+	}
+
+	branches := make([]string, 0)
+	foundDefault := false
+	for branch := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
+		switch {
+		case branch == defaultBranch:
+			foundDefault = true
+		case branch != "":
+			branches = append(branches, branch)
+		}
+	}
+	if !foundDefault {
+		return nil, fmt.Errorf("default branch not found: %s", defaultBranch)
+	}
+	return append([]string{defaultBranch}, branches...), nil
+}
+
+func (r *Repository) Tree(ctx context.Context, branch, treePath string) ([]TreeEntry, error) {
 	if err := validateTreePath(treePath); err != nil {
 		return nil, err
 	}
 
-	treeSpec := "HEAD^{tree}"
+	branchRef := "HEAD"
+	if branch != "" {
+		branchRef = "refs/heads/" + branch
+		if _, err := r.output(ctx, "show-ref", "--verify", "--quiet", branchRef); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			return nil, fmt.Errorf("%w: %s", ErrBranchNotFound, branch)
+		}
+	}
+
+	treeSpec := branchRef + "^{tree}"
 	if treePath != "" {
-		treeSpec = "HEAD:" + treePath
+		treeSpec = branchRef + ":" + treePath
 	}
 	output, err := r.output(ctx, "ls-tree", "-z", "-l", treeSpec)
 	if err != nil {

@@ -17,6 +17,8 @@ export const RepositoryNameSchema = z
       .regex(/^[A-Za-z0-9_-]+$/, 'Repository name contains invalid characters'),
   )
 
+export const BranchNameSchema = z.string().min(1).max(255)
+
 export const TreePathSchema = z
   .string()
   .min(1)

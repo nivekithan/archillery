@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { readWorkerJson } from '../worker-api'
 
 const RepositoryResponseSchema = z.object({
+  branches: z.array(z.string()),
   defaultBranch: z.string(),
 })
 
@@ -38,16 +39,19 @@ export const getRepositoryMetadataFromWorker = createServerOnlyFn(
 
 export const getRepositoryTreeFromWorker = createServerOnlyFn(
   async ({
+    branch,
     path,
     repo,
     username,
   }: {
+    branch?: string
     path?: string
     repo: string
     username: string
   }) => {
     const treeUrl = new URL('https://git-worker')
     treeUrl.pathname = `/api/repositories/${username}/${repo}/tree`
+    if (branch) treeUrl.searchParams.set('branch', branch)
     if (path) treeUrl.searchParams.set('path', path)
 
     const response = await env.GIT_WORKER.fetch(treeUrl)

@@ -36,7 +36,8 @@ func New(config Config) http.Handler {
 }
 
 type repositoryResponse struct {
-	DefaultBranch string `json:"defaultBranch"`
+	DefaultBranch string   `json:"defaultBranch"`
+	Branches      []string `json:"branches"`
 }
 
 func (s *server) repositoryMetadata(request *http.Request) (repositoryResponse, int, error) {
@@ -44,7 +45,14 @@ func (s *server) repositoryMetadata(request *http.Request) (repositoryResponse, 
 	if err != nil {
 		return repositoryResponse{}, 0, err
 	}
-	return repositoryResponse{DefaultBranch: defaultBranch}, http.StatusOK, nil
+	branches, err := s.repository.Branches(request.Context(), defaultBranch)
+	if err != nil {
+		return repositoryResponse{}, 0, err
+	}
+	return repositoryResponse{
+		DefaultBranch: defaultBranch,
+		Branches:      branches,
+	}, http.StatusOK, nil
 }
 
 type treeResponse struct {
@@ -52,7 +60,11 @@ type treeResponse struct {
 }
 
 func (s *server) tree(request *http.Request) (treeResponse, int, error) {
-	entries, err := s.repository.Tree(request.Context(), request.URL.Query().Get("path"))
+	entries, err := s.repository.Tree(
+		request.Context(),
+		request.URL.Query().Get("branch"),
+		request.URL.Query().Get("path"),
+	)
 	if err != nil {
 		return treeResponse{}, 0, err
 	}
@@ -67,6 +79,8 @@ func handle[T any](next func(*http.Request) (T, int, error)) http.HandlerFunc {
 			switch {
 			case errors.Is(err, git.ErrInvalidPath):
 				writeError(w, http.StatusBadRequest, "invalid path")
+			case errors.Is(err, git.ErrBranchNotFound):
+				writeError(w, http.StatusNotFound, "branch not found")
 			case errors.Is(err, git.ErrTreeNotFound):
 				writeError(w, http.StatusNotFound, "directory not found")
 			case errors.Is(err, context.DeadlineExceeded):
