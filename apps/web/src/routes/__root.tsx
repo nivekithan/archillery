@@ -1,5 +1,7 @@
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
 
+import { Toaster } from "@/components/ui/sonner";
+
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -34,6 +36,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="min-h-screen">
         {children}
+        <Toaster theme="light" position="top-center" />
         <Scripts />
       </body>
     </html>
