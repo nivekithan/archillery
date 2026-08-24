@@ -2,6 +2,6 @@
   "name": "@git-cloudflare/container",
   "private": true,
   "scripts": {
-    "build:image": "docker build --file Dockerfile --tag git-cloudflare-container:local ../.."
+    "dev": "docker compose --project-directory ../.. --env-file ../worker/.dev.vars watch"
   }
 }

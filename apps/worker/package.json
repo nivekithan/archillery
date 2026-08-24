@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir dist",
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --var GIT_GATEWAY_URL:http://127.0.0.1:3002",
+    "dev:remote": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },

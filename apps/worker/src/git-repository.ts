@@ -100,6 +100,9 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       console.info("Creating Git sandbox", { diskId, repoName, repoUsername });
       const sandbox = await this.archil.sandboxes.create(
         {
+          name: `${repoUsername}-${repoName}`
+            .toLowerCase()
+            .replaceAll("_", "-"),
           baseImage: this.env.ARCHIL_SANDBOX_IMAGE,
           vcpuCount: 2,
           memSizeMiB: 4096,
@@ -207,7 +210,7 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       try {
         const response = await requestGitGateway({
           request: new Request("https://git-gateway/ping"),
-          gitGatewayHost,
+          gitGatewayUrl: `https://${gitGatewayHost}`,
           originToken,
         });
         lastStatus = response.status;

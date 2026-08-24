@@ -1,0 +1,44 @@
+services:
+  git-metadata-service:
+    image: golang:1.27-bookworm
+    working_dir: /workspace
+    command: go run ./cmd/git-metadata-service
+    environment:
+      GIT_METADATA_SERVICE_ADDRESS: 0.0.0.0:3001
+      GIT_REPOSITORY_PATH: /var/lib/git/repository.git
+    volumes:
+      - ./apps/git-metadata-service:/workspace:ro
+      - git-data:/var/lib/git:ro
+    develop:
+      watch:
+        - action: restart
+          path: apps/git-metadata-service
+
+  git-gateway:
+    build:
+      context: .
+      dockerfile: apps/container/Dockerfile
+    entrypoint:
+      - /bin/sh
+      - /usr/local/bin/git-container-dev-entrypoint
+    environment:
+      GIT_PASSWORD: ${GIT_PASSWORD:?GIT_PASSWORD must be set}
+    ports:
+      - "3002:3000"
+    volumes:
+      - git-data:/var/lib/git
+      - ./apps/container/apache.dev.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./apps/container/entrypoint.dev.sh:/usr/local/bin/git-container-dev-entrypoint:ro
+    depends_on:
+      - git-metadata-service
+    develop:
+      watch:
+        - action: restart
+          path: apps/container/apache.dev.conf
+        - action: restart
+          path: apps/container/entrypoint.dev.sh
+        - action: rebuild
+          path: apps/container/Dockerfile
+
+volumes:
+  git-data:

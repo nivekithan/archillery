@@ -1,10 +1,10 @@
 export async function requestGitGateway({
   request,
-  gitGatewayHost,
+  gitGatewayUrl,
   originToken,
 }: {
   request: Request;
-  gitGatewayHost: string;
+  gitGatewayUrl: string;
   originToken: string;
 }): Promise<Response> {
   const headers = new Headers(request.headers);
@@ -12,12 +12,12 @@ export async function requestGitGateway({
   headers.set("authorization", `Basic ${btoa(`origin:${originToken}`)}`);
 
   const url = new URL(request.url);
-  url.protocol = "https:";
-  url.hostname = gitGatewayHost;
-  url.port = "";
+  const gatewayUrl = new URL(gitGatewayUrl);
+  url.protocol = gatewayUrl.protocol;
+  url.host = gatewayUrl.host;
 
   console.info("Requesting Git gateway", {
-    gitGatewayHost,
+    gitGatewayUrl,
     method: request.method,
     path: url.pathname,
   });
@@ -31,7 +31,7 @@ export async function requestGitGateway({
     }),
   );
   console.info("Git gateway responded", {
-    gitGatewayHost,
+    gitGatewayUrl,
     method: request.method,
     path: url.pathname,
     status: response.status,

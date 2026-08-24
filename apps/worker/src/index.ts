@@ -12,8 +12,12 @@ export { GitRepository };
 
 archil.configure({ apiKey: env.ARCHIL_API_KEY, region: env.ARCHIL_REGION });
 
-type AppEnv = { Bindings: Cloudflare.Env };
+type AppBindings = Cloudflare.Env & {
+  GIT_GATEWAY_URL?: string;
+};
+type AppEnv = { Bindings: AppBindings };
 
+const workerEnv: AppBindings = env;
 const app = new Hono<AppEnv>();
 
 const requireAuth = basicAuth({
@@ -32,6 +36,12 @@ const gitSmartHttpAuth = createMiddleware<AppEnv>((c, next) => {
 app.post("/api/repositories", requireAuth, async (c) => {
   const body = await c.req.json();
   const { repo, username } = RepoNameSchema.parse(body);
+  if (workerEnv.GIT_GATEWAY_URL) {
+    return c.json(
+      { error: "repository creation is disabled in local gateway mode" },
+      501,
+    );
+  }
 
   const repoKey = getRepoKey({ repo, username });
 
@@ -58,6 +68,13 @@ app.post("/api/repositories", requireAuth, async (c) => {
 
 app.delete("/api/repositories/:username/:repo", requireAuth, async (c) => {
   const { repo, username } = RepoNameSchema.parse(c.req.param());
+  if (workerEnv.GIT_GATEWAY_URL) {
+    return c.json(
+      { error: "repository deletion is disabled in local gateway mode" },
+      501,
+    );
+  }
+
   const repoKey = getRepoKey({ repo, username });
 
   const manageDisk = await archil.getDisk(c.env.ARCHIL_META_DISK);
@@ -155,7 +172,7 @@ async function proxyGitSmartHttpRequest({
 
   return requestGitGateway({
     request,
-    gitGatewayHost: origin.gitGatewayHost,
+    gitGatewayUrl: origin.gitGatewayUrl,
     originToken,
   });
 }
@@ -186,7 +203,7 @@ async function proxyGitMetadataServiceRequest({
       headers: request.headers,
       method: request.method,
     }),
-    gitGatewayHost: origin.gitGatewayHost,
+    gitGatewayUrl: origin.gitGatewayUrl,
     originToken,
   });
 }
@@ -198,6 +215,10 @@ async function getRepositoryOrigin({
   repositoryParams: { repo, username },
   request,
 }: RepositoryRequestOptions) {
+  if (workerEnv.GIT_GATEWAY_URL) {
+    return { gitGatewayUrl: workerEnv.GIT_GATEWAY_URL };
+  }
+
   const repoKey = getRepoKey({ repo, username });
   const requestUrl = new URL(request.url);
   console.info("Git request received", {
@@ -227,7 +248,7 @@ async function getRepositoryOrigin({
     repoUsername: username,
   });
 
-  return { gitGatewayHost };
+  return { gitGatewayUrl: `https://${gitGatewayHost}` };
 }
 
 async function getRepoDisk({
