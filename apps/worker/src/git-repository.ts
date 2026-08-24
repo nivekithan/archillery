@@ -312,6 +312,7 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
 
     if (!sandbox) {
       this.cachedArchilSandbox = null;
+      this.ctx.storage.kv.delete(GitRepository.SANDBOX_STATE_KEY);
       console.warn("Idle Git sandbox no longer exists", {
         sandboxId: sandboxState.sandboxId,
       });
@@ -325,20 +326,14 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       return;
     }
 
-    if (sandbox.status === "pending" || sandbox.status === "running") {
-      console.info("Stopping idle Git sandbox", {
-        sandboxId: sandbox.id,
-        status: sandbox.status,
-      });
-      await sandbox.stop();
-      console.info("Idle Git sandbox stopped", { sandboxId: sandbox.id });
-      return;
-    }
-
-    console.info("Git sandbox is already inactive", {
+    console.info("Deleting idle Git sandbox", {
       sandboxId: sandbox.id,
       status: sandbox.status,
     });
+    await sandbox.delete();
+    this.cachedArchilSandbox = null;
+    this.ctx.storage.kv.delete(GitRepository.SANDBOX_STATE_KEY);
+    console.info("Idle Git sandbox deleted", { sandboxId: sandbox.id });
     return;
   }
 
