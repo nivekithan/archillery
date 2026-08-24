@@ -1,4 +1,4 @@
-# Git API
+# Git Metadata Service
 
 Repository-scoped HTTP API that returns the default branch and browses its file
 tree in a bare Git repository.
@@ -14,7 +14,7 @@ Configuration:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `GIT_REPOSITORY_PATH` | `/var/lib/git/repository.git` | Bare repository path |
-| `GIT_API_ADDRESS` | `:3001` | HTTP listen address |
+| `GIT_METADATA_SERVICE_ADDRESS` | `:3001` | HTTP listen address |
 | `GIT_COMMAND_TIMEOUT` | `10s` | Timeout for each Git command |
 
 ## Endpoints

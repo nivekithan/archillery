@@ -1,10 +1,10 @@
-export async function requestGitService({
+export async function requestGitGateway({
   request,
-  gitHost,
+  gitGatewayHost,
   originToken,
 }: {
   request: Request;
-  gitHost: string;
+  gitGatewayHost: string;
   originToken: string;
 }): Promise<Response> {
   const headers = new Headers(request.headers);
@@ -13,11 +13,11 @@ export async function requestGitService({
 
   const url = new URL(request.url);
   url.protocol = "https:";
-  url.hostname = gitHost;
+  url.hostname = gitGatewayHost;
   url.port = "";
 
-  console.info("Requesting Git service", {
-    gitHost,
+  console.info("Requesting Git gateway", {
+    gitGatewayHost,
     method: request.method,
     path: url.pathname,
   });
@@ -30,8 +30,8 @@ export async function requestGitService({
       redirect: "manual",
     }),
   );
-  console.info("Git service responded", {
-    gitHost,
+  console.info("Git gateway responded", {
+    gitGatewayHost,
     method: request.method,
     path: url.pathname,
     status: response.status,

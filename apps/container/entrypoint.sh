@@ -5,18 +5,23 @@ set -eu
 : "${ARCHIL_MOUNT_TOKEN:?ARCHIL_MOUNT_TOKEN is required}"
 : "${ARCHIL_REGION:?ARCHIL_REGION is required}"
 : "${ORIGIN_TOKEN:?ORIGIN_TOKEN is required}"
-: "${REPO_NAME:?REPO_NAME is required}"
-: "${REPO_USERNAME:?REPO_USERNAME is required}"
 
 repository=/var/lib/git/repository.git
 mounted=false
 apache_pid=""
+git_metadata_service_pid=""
 
 cleanup() {
   status=$?
 
   trap - EXIT
   trap '' TERM INT
+
+  if [ -n "$git_metadata_service_pid" ] && kill -0 "$git_metadata_service_pid" 2>/dev/null; then
+    echo "Stopping Git metadata service"
+    kill -TERM "$git_metadata_service_pid" 2>/dev/null || true
+    wait "$git_metadata_service_pid" || true
+  fi
 
   if [ -n "$apache_pid" ] && kill -0 "$apache_pid" 2>/dev/null; then
     echo "Stopping Apache"
@@ -58,28 +63,14 @@ runuser -u www-data -- git -C "$repository" config core.fsync all
 runuser -u www-data -- git -C "$repository" config core.fsyncMethod fsync
 runuser -u www-data -- git -C "$repository" config http.receivepack true
 
-cat > /etc/cgitrc <<EOF
-virtual-root=/$REPO_USERNAME/
-css=/$REPO_USERNAME/$REPO_NAME/cgit.css
-logo=/$REPO_USERNAME/$REPO_NAME/cgit.png
-favicon=/$REPO_USERNAME/$REPO_NAME/favicon.ico
-enable-http-clone=0
-enable-index-owner=0
-enable-commit-graph=1
-enable-log-filecount=1
-enable-log-linecount=1
-max-blob-size=1024
-robots=noindex, nofollow
-root-title=$REPO_USERNAME Git repositories
-root-desc=
-repo.url=$REPO_NAME
-repo.path=$repository
-repo.name=$REPO_NAME
-repo.owner=$REPO_USERNAME
-repo.clone-url=/$REPO_USERNAME/$REPO_NAME.git
-repo.readme=:README.md
-EOF
 htpasswd -bc /etc/apache2/origin.htpasswd origin "$ORIGIN_TOKEN"
+
+echo "Starting Git metadata service on port 3001"
+runuser -u www-data -- env \
+  GIT_METADATA_SERVICE_ADDRESS=127.0.0.1:3001 \
+  GIT_REPOSITORY_PATH="$repository" \
+  /usr/local/bin/git-metadata-service &
+git_metadata_service_pid=$!
 
 set +u
 . /etc/apache2/envvars
@@ -90,7 +81,7 @@ mkdir -p "$APACHE_RUN_DIR" "$APACHE_LOCK_DIR"
 chown "$APACHE_RUN_USER:$APACHE_RUN_GROUP" "$APACHE_RUN_DIR" "$APACHE_LOCK_DIR"
 apache2ctl configtest
 
-echo "Starting Apache on port 3000"
+echo "Starting Git smart HTTP service on port 3000"
 apache2ctl -D FOREGROUND &
 apache_pid=$!
 

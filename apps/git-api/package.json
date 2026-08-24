@@ -1,8 +1,0 @@
-{
-  "name": "@git-cloudflare/git-api",
-  "private": true,
-  "scripts": {
-    "build": "mkdir -p dist && go build -o dist/git-api ./cmd/git-api",
-    "dev": "go run ./cmd/git-api"
-  }
-}

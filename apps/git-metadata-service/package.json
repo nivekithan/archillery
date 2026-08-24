@@ -1,0 +1,8 @@
+{
+  "name": "@git-cloudflare/git-metadata-service",
+  "private": true,
+  "scripts": {
+    "build": "mkdir -p dist && go build -o dist/git-metadata-service ./cmd/git-metadata-service",
+    "dev": "go run ./cmd/git-metadata-service"
+  }
+}

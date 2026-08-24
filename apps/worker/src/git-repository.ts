@@ -2,12 +2,12 @@ import { Archil, ArchilApiError, type Sandbox } from "disk";
 import { DurableObject } from "cloudflare:workers";
 import z from "zod";
 
-import { requestGitService } from "./git-service";
+import { requestGitGateway } from "./git-gateway";
 
 const SERVICE_READY_TIMEOUT_MS = 30_000;
 const SERVICE_READY_POLL_INTERVAL_MS = 250;
 
-const GitServiceSchema = z.object({
+const GitGatewaySchema = z.object({
   hostname: z.string().nonempty(),
 });
 
@@ -16,7 +16,7 @@ const SandboxStateSchema = z.object({
   hostname: z.string().nonempty(),
 });
 
-const CREATE_GIT_SERVICE_COMMAND = [
+const CREATE_GIT_GATEWAY_COMMAND = [
   "archil-sandbox services create",
   '--env ARCHIL_DISK_ID="$ARCHIL_DISK_ID"',
   '--env ARCHIL_MOUNT_TOKEN="$ARCHIL_MOUNT_TOKEN"',
@@ -48,7 +48,7 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     this.cachedArchilSandbox = null;
   }
 
-  async getGitHost({
+  async getGitGatewayHost({
     diskId,
     mountToken,
     originToken,
@@ -79,15 +79,15 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
           hostname: currentSandbox.hostname,
           sandboxId: currentSandbox.sandboxId,
         });
-        const sandbnox = await this.getCachedArchilSandbox(
+        const sandbox = await this.getCachedArchilSandbox(
           currentSandbox.sandboxId,
         );
 
-        if (sandbnox) {
+        if (sandbox) {
           console.info("Reusing Git sandbox", {
             hostname: currentSandbox.hostname,
             sandboxId: currentSandbox.sandboxId,
-            status: sandbnox.status,
+            status: sandbox.status,
           });
           return currentSandbox.hostname;
         }
@@ -98,7 +98,7 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       }
 
       console.info("Creating Git sandbox", { diskId, repoName, repoUsername });
-      const sandox = await this.archil.sandboxes.create(
+      const sandbox = await this.archil.sandboxes.create(
         {
           baseImage: this.env.ARCHIL_SANDBOX_IMAGE,
           vcpuCount: 2,
@@ -108,17 +108,17 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
         { wait: true },
       );
       console.info("Git sandbox created", {
-        sandboxId: sandox.id,
-        status: sandox.status,
+        sandboxId: sandbox.id,
+        status: sandbox.status,
       });
 
-      const hostname = await this.createGitService(sandox, sandboxEnv);
+      const hostname = await this.createGitGateway(sandbox, sandboxEnv);
 
-      this.setSandboxState({ sandboxId: sandox.id, hostname });
-      this.cacheArchilSandbox(sandox);
+      this.setSandboxState({ sandboxId: sandbox.id, hostname });
+      this.cacheArchilSandbox(sandbox);
       console.info("Git sandbox is ready", {
         hostname,
-        sandboxId: sandox.id,
+        sandboxId: sandbox.id,
       });
       return hostname;
     });
@@ -155,31 +155,35 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     });
   }
 
-  private async createGitService(
+  private async createGitGateway(
     sandbox: Sandbox,
     env: Record<string, string>,
   ) {
     try {
-      console.info("Creating Git network service", { sandboxId: sandbox.id });
-      const service = await sandbox.exec(CREATE_GIT_SERVICE_COMMAND, { env });
+      console.info("Creating Git gateway", { sandboxId: sandbox.id });
+      const service = await sandbox.exec(CREATE_GIT_GATEWAY_COMMAND, {
+        env,
+      });
       if (service.exitCode !== 0) {
-        throw new Error(`Failed to create Git service: ${service.stderr}`);
+        throw new Error(
+          `Failed to create Git gateway: ${service.stderr}`,
+        );
       }
 
-      const hostname = GitServiceSchema.parse(
+      const hostname = GitGatewaySchema.parse(
         JSON.parse(service.stdout),
       ).hostname;
-      await this.waitForGitService({
-        gitHost: hostname,
+      await this.waitForGitGateway({
+        gitGatewayHost: hostname,
         originToken: env.ORIGIN_TOKEN,
       });
-      console.info("Git network service created", {
+      console.info("Git gateway created", {
         hostname,
         sandboxId: sandbox.id,
       });
       return hostname;
     } catch (error) {
-      console.error("Failed to create Git network service", {
+      console.error("Failed to create Git gateway", {
         error,
         sandboxId: sandbox.id,
       });
@@ -188,11 +192,11 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     }
   }
 
-  private async waitForGitService({
-    gitHost,
+  private async waitForGitGateway({
+    gitGatewayHost,
     originToken,
   }: {
-    gitHost: string;
+    gitGatewayHost: string;
     originToken: string;
   }) {
     const startedAt = Date.now();
@@ -201,15 +205,15 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
 
     while (Date.now() < readyDeadline) {
       try {
-        const response = await requestGitService({
-          request: new Request("https://git-service/ping"),
-          gitHost,
+        const response = await requestGitGateway({
+          request: new Request("https://git-gateway/ping"),
+          gitGatewayHost,
           originToken,
         });
         lastStatus = response.status;
         if (response.ok) {
-          console.info("Git network service is ready", {
-            gitHost,
+          console.info("Git gateway is ready", {
+            gitGatewayHost,
             readyInMs: Date.now() - startedAt,
           });
           return;
@@ -221,7 +225,7 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     }
 
     throw new Error(
-      `Git network service did not become ready (last status: ${lastStatus ?? "unreachable"})`,
+      `Git gateway did not become ready (last status: ${lastStatus ?? "unreachable"})`,
     );
   }
 

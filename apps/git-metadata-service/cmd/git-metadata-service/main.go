@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/nivekithan/archillery/apps/git-api/internal/server"
+	"github.com/nivekithan/archillery/apps/git-metadata-service/internal/server"
 )
 
 const (
@@ -16,14 +16,14 @@ const (
 )
 
 func main() {
-	address := envOrDefault("GIT_API_ADDRESS", defaultAddress)
+	address := envOrDefault("GIT_METADATA_SERVICE_ADDRESS", defaultAddress)
 	repositoryPath := envOrDefault("GIT_REPOSITORY_PATH", defaultRepository)
 	handler := server.New(server.Config{
 		CommandTimeout: envDuration("GIT_COMMAND_TIMEOUT", defaultCommandTimeout),
 		RepositoryPath: repositoryPath,
 	})
 
-	log.Printf("Git API listening on %s for %s", address, repositoryPath)
+	log.Printf("Git metadata service listening on %s for %s", address, repositoryPath)
 	if err := http.ListenAndServe(address, handler); err != nil {
 		log.Fatal(err)
 	}
