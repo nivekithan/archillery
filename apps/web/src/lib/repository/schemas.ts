@@ -19,6 +19,10 @@ export const RepositoryNameSchema = z
 
 export const BranchNameSchema = z.string().min(1).max(255)
 
+export const CommitHashSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{40}$/, 'Invalid commit hash')
+
 export const TreePathSchema = z
   .string()
   .min(1)

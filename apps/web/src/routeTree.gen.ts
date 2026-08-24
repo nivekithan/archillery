@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as UsernameRepoRouteImport } from './routes/$username.$repo'
+import { Route as UsernameRepoIndexRouteImport } from './routes/$username.$repo.index'
+import { Route as UsernameRepoCommitsRouteImport } from './routes/$username.$repo.commits'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +24,52 @@ const UsernameRepoRoute = UsernameRepoRouteImport.update({
   path: '/$username/$repo',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UsernameRepoIndexRoute = UsernameRepoIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => UsernameRepoRoute,
+} as any)
+const UsernameRepoCommitsRoute = UsernameRepoCommitsRouteImport.update({
+  id: '/commits',
+  path: '/commits',
+  getParentRoute: () => UsernameRepoRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/$username/$repo': typeof UsernameRepoRoute
+  '/$username/$repo': typeof UsernameRepoRouteWithChildren
+  '/$username/$repo/commits': typeof UsernameRepoCommitsRoute
+  '/$username/$repo/': typeof UsernameRepoIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/$username/$repo': typeof UsernameRepoRoute
+  '/$username/$repo/commits': typeof UsernameRepoCommitsRoute
+  '/$username/$repo': typeof UsernameRepoIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/$username/$repo': typeof UsernameRepoRoute
+  '/$username/$repo': typeof UsernameRepoRouteWithChildren
+  '/$username/$repo/commits': typeof UsernameRepoCommitsRoute
+  '/$username/$repo/': typeof UsernameRepoIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$username/$repo'
+  fullPaths:
+    '/' | '/$username/$repo' | '/$username/$repo/commits' | '/$username/$repo/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$username/$repo'
-  id: '__root__' | '/' | '/$username/$repo'
+  to: '/' | '/$username/$repo/commits' | '/$username/$repo'
+  id:
+    | '__root__'
+    | '/'
+    | '/$username/$repo'
+    | '/$username/$repo/commits'
+    | '/$username/$repo/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  UsernameRepoRoute: typeof UsernameRepoRoute
+  UsernameRepoRoute: typeof UsernameRepoRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +88,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UsernameRepoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$username/$repo/': {
+      id: '/$username/$repo/'
+      path: '/'
+      fullPath: '/$username/$repo/'
+      preLoaderRoute: typeof UsernameRepoIndexRouteImport
+      parentRoute: typeof UsernameRepoRoute
+    }
+    '/$username/$repo/commits': {
+      id: '/$username/$repo/commits'
+      path: '/commits'
+      fullPath: '/$username/$repo/commits'
+      preLoaderRoute: typeof UsernameRepoCommitsRouteImport
+      parentRoute: typeof UsernameRepoRoute
+    }
   }
 }
 
+interface UsernameRepoRouteChildren {
+  UsernameRepoCommitsRoute: typeof UsernameRepoCommitsRoute
+  UsernameRepoIndexRoute: typeof UsernameRepoIndexRoute
+}
+
+const UsernameRepoRouteChildren: UsernameRepoRouteChildren = {
+  UsernameRepoCommitsRoute: UsernameRepoCommitsRoute,
+  UsernameRepoIndexRoute: UsernameRepoIndexRoute,
+}
+
+const UsernameRepoRouteWithChildren = UsernameRepoRoute._addFileChildren(
+  UsernameRepoRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  UsernameRepoRoute: UsernameRepoRoute,
+  UsernameRepoRoute: UsernameRepoRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

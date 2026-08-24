@@ -20,6 +20,19 @@ const TreeResponseSchema = z.object({
   ),
 })
 
+const CommitsResponseSchema = z.object({
+  commits: z.array(
+    z.object({
+      hash: z.string(),
+      shortHash: z.string(),
+      message: z.string(),
+      authorName: z.string(),
+      authorEmail: z.string(),
+      committedAt: z.iso.datetime({ offset: true }),
+    }),
+  ),
+})
+
 export const getRepositoryMetadataFromWorker = createServerOnlyFn(
   async ({ repo, username }: { repo: string; username: string }) => {
     const repositoryUrl = new URL('https://git-worker')
@@ -41,11 +54,13 @@ export const getRepositoryTreeFromWorker = createServerOnlyFn(
   async ({
     branch,
     path,
+    ref,
     repo,
     username,
   }: {
     branch?: string
     path?: string
+    ref?: string
     repo: string
     username: string
   }) => {
@@ -53,6 +68,7 @@ export const getRepositoryTreeFromWorker = createServerOnlyFn(
     treeUrl.pathname = `/api/repositories/${username}/${repo}/tree`
     if (branch) treeUrl.searchParams.set('branch', branch)
     if (path) treeUrl.searchParams.set('path', path)
+    if (ref) treeUrl.searchParams.set('ref', ref)
 
     try {
       const response = await env.GIT_WORKER.fetch(treeUrl)
@@ -75,5 +91,31 @@ export const getRepositoryTreeFromWorker = createServerOnlyFn(
       }
       throw error
     }
+  },
+)
+
+export const getRepositoryCommitsFromWorker = createServerOnlyFn(
+  async ({
+    branch,
+    repo,
+    username,
+  }: {
+    branch?: string
+    repo: string
+    username: string
+  }) => {
+    const commitsUrl = new URL('https://git-worker')
+    commitsUrl.pathname = `/api/repositories/${username}/${repo}/commits`
+    if (branch) commitsUrl.searchParams.set('branch', branch)
+
+    const response = await env.GIT_WORKER.fetch(commitsUrl)
+    const commits = CommitsResponseSchema.safeParse(
+      await readWorkerJson(response),
+    )
+    if (!commits.success) {
+      throw new Error('Repository service returned an invalid response')
+    }
+
+    return commits.data.commits
   },
 )

@@ -6,6 +6,7 @@ import (
 	pathpkg "path"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 type TreeEntry struct {
@@ -13,6 +14,38 @@ type TreeEntry struct {
 	Path string `json:"path"`
 	Type string `json:"type"`
 	Size *int64 `json:"size,omitempty"`
+}
+
+type Commit struct {
+	Hash        string `json:"hash"`
+	ShortHash   string `json:"shortHash"`
+	Message     string `json:"message"`
+	AuthorName  string `json:"authorName"`
+	AuthorEmail string `json:"authorEmail"`
+	CommittedAt string `json:"committedAt"`
+}
+
+func parseCommits(output []byte) ([]Commit, error) {
+	commits := make([]Commit, 0)
+	for record := range bytes.SplitSeq(output, []byte{0x1e}) {
+		record = bytes.TrimSpace(record)
+		if len(record) == 0 {
+			continue
+		}
+		fields := strings.Split(string(record), string(rune(0x1f)))
+		if len(fields) != 6 {
+			return nil, fmt.Errorf("parse commit: unexpected git output")
+		}
+		commits = append(commits, Commit{
+			Hash:        fields[0],
+			ShortHash:   fields[1],
+			Message:     fields[2],
+			AuthorName:  fields[3],
+			AuthorEmail: fields[4],
+			CommittedAt: fields[5],
+		})
+	}
+	return commits, nil
 }
 
 func parseTreeEntries(output []byte, parentPath string) ([]TreeEntry, error) {

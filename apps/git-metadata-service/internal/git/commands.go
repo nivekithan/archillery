@@ -66,12 +66,38 @@ func (c *commands) refExists(ctx context.Context, ref string) (bool, error) {
 	return false, err
 }
 
+func (c *commands) revisionExists(ctx context.Context, revision string) (bool, error) {
+	_, err := c.output(ctx, "rev-parse", "--verify", "--quiet", revision)
+	if err == nil {
+		return true, nil
+	}
+
+	if exitError, ok := errors.AsType[*exec.ExitError](err); ok && exitError.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, err
+}
+
 func (c *commands) tree(ctx context.Context, treeSpec, parentPath string) ([]TreeEntry, error) {
 	output, err := c.output(ctx, "ls-tree", "-z", "-l", treeSpec)
 	if err != nil {
 		return nil, err
 	}
 	return parseTreeEntries(output, parentPath)
+}
+
+func (c *commands) commits(ctx context.Context, ref string, limit int) ([]Commit, error) {
+	output, err := c.output(
+		ctx,
+		"log",
+		"--max-count="+fmt.Sprint(limit),
+		"--format=%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%cI%x1e",
+		ref,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return parseCommits(output)
 }
 
 func (c *commands) output(ctx context.Context, args ...string) ([]byte, error) {

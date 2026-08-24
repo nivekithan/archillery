@@ -11,7 +11,9 @@ import (
 
 var (
 	ErrBranchNotFound = errors.New("branch not found")
+	ErrCommitNotFound = errors.New("commit not found")
 	ErrInvalidPath    = errors.New("invalid path")
+	ErrInvalidRef     = errors.New("invalid ref")
 	ErrTreeNotFound   = errors.New("tree not found")
 )
 
@@ -52,26 +54,30 @@ func (r *Repository) Branches(ctx context.Context, defaultBranch string) ([]stri
 	return append([]string{defaultBranch}, branches...), nil
 }
 
-func (r *Repository) Tree(ctx context.Context, branch, treePath string) ([]TreeEntry, error) {
+func (r *Repository) Commits(ctx context.Context, branch, commit string, limit int) ([]Commit, error) {
+	ref, err := r.revisionRef(ctx, branch, commit)
+	if err != nil {
+		return nil, err
+	}
+	commits, err := r.commands.commits(ctx, ref, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list commits: %w", err)
+	}
+	return commits, nil
+}
+
+func (r *Repository) Tree(ctx context.Context, branch, commit, treePath string) ([]TreeEntry, error) {
 	if err := validateTreePath(treePath); err != nil {
 		return nil, err
 	}
-
-	branchRef := "HEAD"
-	if branch != "" {
-		branchRef = "refs/heads/" + branch
-		exists, err := r.commands.refExists(ctx, branchRef)
-		if err != nil {
-			return nil, err
-		}
-		if !exists {
-			return nil, fmt.Errorf("%w: %s", ErrBranchNotFound, branch)
-		}
+	ref, err := r.revisionRef(ctx, branch, commit)
+	if err != nil {
+		return nil, err
 	}
 
-	treeSpec := branchRef + "^{tree}"
+	treeSpec := ref + "^{tree}"
 	if treePath != "" {
-		treeSpec = branchRef + ":" + treePath
+		treeSpec = ref + ":" + treePath
 	}
 	entries, err := r.commands.tree(ctx, treeSpec, treePath)
 	if err != nil {
@@ -84,6 +90,54 @@ func (r *Repository) Tree(ctx context.Context, branch, treePath string) ([]TreeE
 		return nil, err
 	}
 	return entries, nil
+}
+
+func (r *Repository) revisionRef(ctx context.Context, branch, commit string) (string, error) {
+	if branch != "" && commit != "" {
+		return "", ErrInvalidRef
+	}
+	if commit == "" {
+		return r.branchRef(ctx, branch)
+	}
+	if !isCommitHash(commit) {
+		return "", ErrInvalidRef
+	}
+
+	exists, err := r.commands.revisionExists(ctx, commit+"^{commit}")
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "", fmt.Errorf("%w: %s", ErrCommitNotFound, commit)
+	}
+	return commit, nil
+}
+
+func (r *Repository) branchRef(ctx context.Context, branch string) (string, error) {
+	if branch == "" {
+		return "HEAD", nil
+	}
+	ref := "refs/heads/" + branch
+	exists, err := r.commands.refExists(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "", fmt.Errorf("%w: %s", ErrBranchNotFound, branch)
+	}
+	return ref, nil
+}
+
+func isCommitHash(value string) bool {
+	if len(value) != 40 {
+		return false
+	}
+	for _, character := range value {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", character) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateTreePath(value string) error {
