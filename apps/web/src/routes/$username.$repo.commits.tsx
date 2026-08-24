@@ -43,13 +43,12 @@ export const Route = createFileRoute("/$username/$repo/commits")({
     return {
       ...repository,
       loadedAt: Date.now(),
-      selectedBranch: deps.branch ?? repository.defaultBranch,
     };
   },
-  head: ({ loaderData, params }) => ({
+  head: ({ params }) => ({
     meta: [
       {
-        title: `Commits · ${params.username}/${params.repo} · ${loaderData?.selectedBranch ?? "Repository"}`,
+        title: `Commits · ${params.username}/${params.repo}`,
       },
     ],
   }),
@@ -60,12 +59,13 @@ export const Route = createFileRoute("/$username/$repo/commits")({
 function Commits() {
   const { repo, username } = Route.useParams();
   const navigate = Route.useNavigate();
-  const { branches, commits, defaultBranch, loadedAt, selectedBranch } =
-    Route.useLoaderData();
+  const { branch } = Route.useSearch();
+  const { branches, commits, defaultBranch, loadedAt } = Route.useLoaderData();
+  const currentBranch = branch ?? defaultBranch;
   const commitGroups = groupCommitsByDate(commits);
 
   function selectBranch(value: string | number | null) {
-    if (typeof value !== "string" || value === selectedBranch) return;
+    if (typeof value !== "string") return;
     void navigate({
       search: {
         branch: value === defaultBranch ? undefined : value,
@@ -86,7 +86,7 @@ function Commits() {
     <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6">
       <div className="border-b pb-4">
         <Combobox
-          value={selectedBranch}
+          value={currentBranch}
           onChange={selectBranch}
           allowsEmptyCollection
           menuTrigger="focus"
