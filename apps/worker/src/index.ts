@@ -128,6 +128,17 @@ app.get("/api/repositories/:username/:repo/commits", (c) =>
   }),
 );
 
+app.get("/api/repositories/:username/:repo/commit", (c) =>
+  proxyGitMetadataServiceRequest({
+    apiPath: "/api/v1/commit",
+    metaDiskId: c.env.ARCHIL_META_DISK,
+    originToken: c.env.GIT_PASSWORD,
+    repositories: c.env.GIT_REPOSITORY,
+    repositoryParams: RepoNameSchema.parse(c.req.param()),
+    request: c.req.raw,
+  }),
+);
+
 app.get("/api/repositories/:username/:repo/summary", (c) =>
   proxyGitMetadataServiceRequest({
     apiPath: "/api/v1/summary",

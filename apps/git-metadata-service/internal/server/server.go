@@ -33,6 +33,7 @@ func New(config Config) http.Handler {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/repository", handle(s.repositoryMetadata))
+	mux.HandleFunc("GET /api/v1/commit", handle(s.commit))
 	mux.HandleFunc("GET /api/v1/commits", handle(s.commits))
 	mux.HandleFunc("GET /api/v1/summary", handle(s.summary))
 	mux.HandleFunc("GET /api/v1/content", handle(s.content))
@@ -69,6 +70,17 @@ type contentResponse struct {
 
 type commitsResponse struct {
 	Commits []git.Commit `json:"commits"`
+}
+
+func (s *server) commit(request *http.Request) (git.CommitDetail, int, error) {
+	commit, err := s.repository.Commit(
+		request.Context(),
+		request.URL.Query().Get("ref"),
+	)
+	if err != nil {
+		return git.CommitDetail{}, 0, err
+	}
+	return commit, http.StatusOK, nil
 }
 
 func (s *server) commits(request *http.Request) (commitsResponse, int, error) {

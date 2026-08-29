@@ -125,6 +125,30 @@ func (c *commands) commitCount(ctx context.Context, ref string) (int64, error) {
 	return count, nil
 }
 
+func (c *commands) commitParents(ctx context.Context, ref string) ([]string, error) {
+	output, err := c.output(ctx, "show", "--no-patch", "--format=%P", ref)
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(output)), nil
+}
+
+func (c *commands) commitPatch(ctx context.Context, ref string) ([]byte, error) {
+	return c.output(
+		ctx,
+		"show",
+		"--format=",
+		"--first-parent",
+		"--find-renames",
+		"--find-copies",
+		"--no-ext-diff",
+		"--no-color",
+		"--patch",
+		"--unified=3",
+		ref,
+	)
+}
+
 func (c *commands) output(ctx context.Context, args ...string) ([]byte, error) {
 	commandContext, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()

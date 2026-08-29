@@ -35,7 +35,7 @@ export function RepositoryHeader({
 
   return (
     <section className="repository-header border-b">
-      <div className="mx-auto w-full max-w-7xl px-4 pt-5 sm:px-6">
+      <div className="mx-auto w-full max-w-[1600px] px-4 pt-5 sm:px-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <h1 className="flex min-w-0 items-center gap-2 text-lg">
             <BookBookmarkIcon

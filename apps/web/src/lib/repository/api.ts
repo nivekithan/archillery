@@ -46,6 +46,12 @@ const CommitsResponseSchema = z.object({
   commits: z.array(CommitSchema),
 });
 
+const CommitDetailResponseSchema = z.object({
+  commit: CommitSchema,
+  parents: z.array(z.string()),
+  patch: z.string(),
+});
+
 const RepositorySummaryResponseSchema = z.object({
   latestCommit: CommitSchema,
   totalCommits: z.number().int().nonnegative(),
@@ -126,6 +132,32 @@ export const getRepositoryCommitsFromWorker = createServerOnlyFn(
     }
 
     return commits.data.commits;
+  },
+);
+
+export const getRepositoryCommitFromWorker = createServerOnlyFn(
+  async ({
+    commit,
+    repo,
+    username,
+  }: {
+    commit: string;
+    repo: string;
+    username: string;
+  }) => {
+    const commitUrl = new URL("https://git-worker");
+    commitUrl.pathname = `/api/repositories/${username}/${repo}/commit`;
+    commitUrl.searchParams.set("ref", commit);
+
+    const response = await env.GIT_WORKER.fetch(commitUrl);
+    const detail = CommitDetailResponseSchema.safeParse(
+      await readWorkerJson(response),
+    );
+    if (!detail.success) {
+      throw new Error("Repository service returned an invalid response");
+    }
+
+    return detail.data;
   },
 );
 

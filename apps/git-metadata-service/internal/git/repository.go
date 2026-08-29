@@ -67,6 +67,55 @@ func (r *Repository) Commits(ctx context.Context, branch, commit string, limit i
 	return commits, nil
 }
 
+type CommitDetail struct {
+	Commit  Commit   `json:"commit"`
+	Parents []string `json:"parents"`
+	Patch   string   `json:"patch"`
+}
+
+func (r *Repository) Commit(ctx context.Context, commit string) (CommitDetail, error) {
+	ref, err := r.revisionRef(ctx, "", commit)
+	if err != nil {
+		return CommitDetail{}, err
+	}
+
+	var commits []Commit
+	var commitsErr error
+	var parents []string
+	var parentsErr error
+	var patch []byte
+	var patchErr error
+	var waitGroup sync.WaitGroup
+	waitGroup.Go(func() {
+		commits, commitsErr = r.commands.commits(ctx, ref, 1)
+	})
+	waitGroup.Go(func() {
+		parents, parentsErr = r.commands.commitParents(ctx, ref)
+	})
+	waitGroup.Go(func() {
+		patch, patchErr = r.commands.commitPatch(ctx, ref)
+	})
+	waitGroup.Wait()
+
+	if commitsErr != nil {
+		return CommitDetail{}, fmt.Errorf("read commit: %w", commitsErr)
+	}
+	if len(commits) != 1 || !strings.EqualFold(commits[0].Hash, commit) {
+		return CommitDetail{}, fmt.Errorf("%w: %s", ErrCommitNotFound, commit)
+	}
+	if parentsErr != nil {
+		return CommitDetail{}, fmt.Errorf("read commit parents: %w", parentsErr)
+	}
+	if patchErr != nil {
+		return CommitDetail{}, fmt.Errorf("read commit patch: %w", patchErr)
+	}
+	return CommitDetail{
+		Commit:  commits[0],
+		Parents: parents,
+		Patch:   string(patch),
+	}, nil
+}
+
 type RepositorySummary struct {
 	LatestCommit Commit `json:"latestCommit"`
 	TotalCommits int64  `json:"totalCommits"`

@@ -76,7 +76,7 @@ function Repository() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6">
+    <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 py-6 sm:px-6">
       <RepositoryPathNavigation
         branch={branch}
         branches={branches}

@@ -43,9 +43,9 @@ export function RepositoryCommitSummary({
           {latestCommit.authorName}
         </span>
         <Link
-          to="/$username/$repo"
-          params={{ repo, username }}
-          search={{ branch: undefined, path: undefined, ref: latestCommit.hash }}
+          to="/$username/$repo/commit/$commit"
+          params={{ commit: latestCommit.hash, repo, username }}
+          search={{ branch }}
           className="truncate text-muted-foreground transition-colors hover:text-foreground hover:underline"
         >
           {latestCommit.message}

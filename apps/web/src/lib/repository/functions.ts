@@ -4,6 +4,7 @@ import { z } from "zod";
 import { preloadDiffsFile } from "@/lib/diffs/ssr";
 
 import {
+  getRepositoryCommitFromWorker,
   getRepositoryCommitsFromWorker,
   getRepositoryContentFromWorker,
   getRepositoryMetadataFromWorker,
@@ -64,4 +65,20 @@ export const getRepositoryCommits = createServerFn({ method: "GET" })
     ]);
 
     return { ...repository, commits };
+  });
+
+const RepositoryCommitInputSchema = z.object({
+  commit: CommitHashSchema,
+  repo: RepositoryNameSchema,
+  username: UsernameSchema,
+});
+
+export const getRepositoryCommit = createServerFn({ method: "GET" })
+  .validator(RepositoryCommitInputSchema)
+  .handler(async ({ data }) => {
+    const [repository, detail] = await Promise.all([
+      getRepositoryMetadataFromWorker(data),
+      getRepositoryCommitFromWorker(data),
+    ]);
+    return { ...repository, ...detail };
   });

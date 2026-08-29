@@ -126,5 +126,12 @@
     }
   html {
     @apply font-sans;
-    }
+  }
+}
+
+@layer components {
+  .commit-code-view diffs-container {
+    border-bottom: 1px solid color-mix(in oklch, var(--foreground) 14%, var(--card));
+    box-sizing: border-box;
+  }
 }

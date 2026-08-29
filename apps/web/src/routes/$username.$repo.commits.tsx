@@ -85,7 +85,7 @@ function Commits() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6 sm:px-6">
+    <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-6 sm:px-6">
       <div className="border-b pb-4">
         <Combobox
           value={ref ?? currentBranch}
@@ -161,13 +161,9 @@ function Commits() {
                   >
                     <div className="min-w-0">
                       <Link
-                        to="/$username/$repo"
-                        params={{ repo, username }}
-                        search={{
-                          branch: undefined,
-                          path: undefined,
-                          ref: commit.hash,
-                        }}
+                        to="/$username/$repo/commit/$commit"
+                        params={{ commit: commit.hash, repo, username }}
+                        search={{ branch: ref ? undefined : branch }}
                         className="block truncate font-medium hover:text-accent hover:underline"
                       >
                         {commit.message}
