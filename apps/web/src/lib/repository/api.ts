@@ -94,15 +94,26 @@ export const getRepositoryContentFromWorker = createServerOnlyFn(
     if (path) contentUrl.searchParams.set("path", path);
     if (ref) contentUrl.searchParams.set("ref", ref);
 
-    const response = await env.GIT_WORKER.fetch(contentUrl);
-    const content = ContentResponseSchema.safeParse(
-      await readWorkerJson(response),
-    );
-    if (!content.success) {
-      throw new Error("Repository service returned an invalid response");
-    }
+    try {
+      const response = await env.GIT_WORKER.fetch(contentUrl);
+      const content = ContentResponseSchema.safeParse(
+        await readWorkerJson(response),
+      );
+      if (!content.success) {
+        throw new Error("Repository service returned an invalid response");
+      }
 
-    return content.data;
+      return content.data;
+    } catch (error) {
+      if (
+        path &&
+        error instanceof Error &&
+        error.message === "path not found"
+      ) {
+        return { type: "path-not-found" as const };
+      }
+      throw error;
+    }
   },
 );
 

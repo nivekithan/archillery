@@ -1,9 +1,14 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { ArrowsClockwiseIcon, GitForkIcon } from "@phosphor-icons/react";
+import { Await, createFileRoute, useRouter } from "@tanstack/react-router";
+import {
+  ArrowsClockwiseIcon,
+  FolderIcon,
+  GitForkIcon,
+} from "@phosphor-icons/react";
 import { z } from "zod";
 
 import { RepositoryFile } from "@/components/repository-file";
 import { RepositoryPathNavigation } from "@/components/repository-path-navigation";
+import { RepositoryReadme } from "@/components/repository-readme";
 import { RepositoryTree } from "@/components/repository-tree";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,20 +32,23 @@ export const Route = createFileRoute("/$username/$repo/")({
     path: search.path,
     ref: search.ref,
   }),
-  loader: async ({ deps, params }) => {
-    const repository = await getRepository({
-      data: {
-        branch: deps.ref ? undefined : deps.branch,
-        path: deps.path,
-        ref: deps.ref,
-        repo: params.repo,
-        username: params.username,
-      },
-    });
-    return {
-      ...repository,
-      loadedAt: Date.now(),
-    };
+  loader: {
+    staleReloadMode: "blocking",
+    handler: async ({ deps, params }) => {
+      const repository = await getRepository({
+        data: {
+          branch: deps.ref ? undefined : deps.branch,
+          path: deps.path,
+          ref: deps.ref,
+          repo: params.repo,
+          username: params.username,
+        },
+      });
+      return {
+        ...repository,
+        loadedAt: Date.now(),
+      };
+    },
   },
 
   head: ({ params }) => ({
@@ -88,7 +96,29 @@ function Repository() {
         username={username}
       />
 
-      {repository.type === "blob" ? (
+      {repository.type === "path-not-found" ? (
+        <Empty className="min-h-72 border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FolderIcon weight="fill" className="size-5 text-accent" />
+            </EmptyMedia>
+            <EmptyTitle>Directory not found</EmptyTitle>
+            <EmptyDescription>
+              The directory <span className="font-medium">{path}</span> does not
+              exist on branch{" "}
+              <span className="font-medium">{branch ?? defaultBranch}</span>.
+            </EmptyDescription>
+          </EmptyHeader>
+          <Button
+            variant="outline"
+            onPress={() =>
+              navigate({ search: { branch, path: undefined, ref } })
+            }
+          >
+            View branch root
+          </Button>
+        </Empty>
+      ) : repository.type === "blob" ? (
         <RepositoryFile
           branch={branch}
           contents={repository.contents}
@@ -104,17 +134,33 @@ function Repository() {
           username={username}
         />
       ) : (
-        <RepositoryTree
-          branch={branch}
-          entries={repository.entries}
-          latestCommit={latestCommit}
-          loadedAt={loadedAt}
-          path={path}
-          ref={ref}
-          repo={repo}
-          totalCommits={totalCommits}
-          username={username}
-        />
+        <>
+          <RepositoryTree
+            branch={branch}
+            entries={repository.entries}
+            latestCommit={latestCommit}
+            loadedAt={loadedAt}
+            path={path}
+            ref={ref}
+            repo={repo}
+            totalCommits={totalCommits}
+            username={username}
+          />
+          <Await fallback={null} promise={repository.readme}>
+            {(readme) =>
+              readme ? (
+                <RepositoryReadme
+                  branch={branch}
+                  contents={readme.contents}
+                  path={readme.path}
+                  ref={ref}
+                  repo={repo}
+                  username={username}
+                />
+              ) : null
+            }
+          </Await>
+        </>
       )}
     </main>
   );

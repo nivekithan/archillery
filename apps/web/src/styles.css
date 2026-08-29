@@ -2,6 +2,14 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "katex/dist/katex.min.css";
+@import "streamdown/styles.css";
+
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -130,6 +138,62 @@
 }
 
 @layer components {
+  .github-markdown [data-streamdown="code-block"] {
+    position: relative !important;
+    gap: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .github-markdown [data-streamdown="code-block-header"] {
+    display: none !important;
+  }
+
+  .github-markdown [data-streamdown="code-block"] > div:has(> [data-streamdown="code-block-actions"]) {
+    position: absolute !important;
+    top: 0.5rem !important;
+    right: 0.5rem !important;
+    z-index: 10 !important;
+    height: 2rem !important;
+    margin: 0 !important;
+  }
+
+  .github-markdown [data-streamdown="code-block-actions"] {
+    border-color: transparent !important;
+    background: transparent !important;
+  }
+
+  .github-markdown [data-streamdown="code-block-body"] {
+    border: 0 !important;
+    background: color-mix(in oklch, var(--muted) 70%, var(--card)) !important;
+    padding: 1rem !important;
+  }
+
+  .github-markdown :is(h1, h2) {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.3em;
+  }
+
+  .github-markdown [data-streamdown="table-wrapper"] {
+    display: block !important;
+    overflow-x: auto !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .github-markdown [data-streamdown="table-wrapper"] table {
+    width: max-content !important;
+    min-width: 0 !important;
+  }
+
+  .github-markdown [data-streamdown="table-wrapper"] > div {
+    width: max-content;
+    max-width: 100%;
+  }
+
   .commit-code-view diffs-container {
     border-bottom: 1px solid color-mix(in oklch, var(--foreground) 14%, var(--card));
     box-sizing: border-box;

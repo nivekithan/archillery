@@ -35,10 +35,13 @@ export const getRepository = createServerFn({ method: "GET" })
       getRepositorySummaryFromWorker(data),
       getRepositoryContentFromWorker(data),
     ]);
-    let prerenderedHTML: string | undefined;
-    if (content.type === "blob" && !content.isBinary && data.path) {
-      prerenderedHTML = await preloadDiffsFile(data.path, content.contents);
-    }
+    const readme = getRepositoryReadme(data, content);
+    const prerenderedHTML = await (async () => {
+      if (content.type === "blob" && !content.isBinary && data.path) {
+        return preloadDiffsFile(data.path, content.contents);
+      }
+      return undefined;
+    })();
 
     return {
       branches: repository.branches,
@@ -46,8 +49,39 @@ export const getRepository = createServerFn({ method: "GET" })
       ...summary,
       ...content,
       prerenderedHTML,
+      readme,
     };
   });
+
+async function getRepositoryReadme(
+  data: z.infer<typeof RepositoryInputSchema>,
+  content: Awaited<ReturnType<typeof getRepositoryContentFromWorker>>,
+) {
+  if (content.type !== "tree") {
+    return undefined;
+  }
+
+  const readmeEntry = content.entries.find(
+    (entry) =>
+      entry.type === "blob" && entry.name.toLowerCase() === "readme.md",
+  );
+  if (!readmeEntry) {
+    return undefined;
+  }
+
+  const readmeContent = await getRepositoryContentFromWorker({
+    ...data,
+    path: readmeEntry.path,
+  });
+  if (readmeContent.type !== "blob" || readmeContent.isBinary) {
+    return undefined;
+  }
+
+  return {
+    contents: readmeContent.contents,
+    path: readmeEntry.path,
+  };
+}
 
 const RepositoryCommitsInputSchema = z.object({
   branch: BranchNameSchema.optional(),
