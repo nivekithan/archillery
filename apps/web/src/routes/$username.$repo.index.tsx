@@ -120,6 +120,7 @@ function Repository() {
         </Empty>
       ) : repository.type === "blob" ? (
         <RepositoryFile
+          key={path}
           branch={branch}
           contents={repository.contents}
           isBinary={repository.isBinary}
