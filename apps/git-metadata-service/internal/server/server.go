@@ -35,7 +35,6 @@ func New(config Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/repository", handle(s.repositoryMetadata))
 	mux.HandleFunc("GET /api/v1/commits", handle(s.commits))
 	mux.HandleFunc("GET /api/v1/summary", handle(s.summary))
-	mux.HandleFunc("GET /api/v1/tree", handle(s.tree))
 	mux.HandleFunc("GET /api/v1/content", handle(s.content))
 	return mux
 }
@@ -58,10 +57,6 @@ func (s *server) repositoryMetadata(request *http.Request) (repositoryResponse, 
 		DefaultBranch: defaultBranch,
 		Branches:      branches,
 	}, http.StatusOK, nil
-}
-
-type treeResponse struct {
-	Entries []git.TreeEntry `json:"entries"`
 }
 
 type contentResponse struct {
@@ -101,19 +96,6 @@ func (s *server) summary(request *http.Request) (git.RepositorySummary, int, err
 	return summary, http.StatusOK, nil
 }
 
-func (s *server) tree(request *http.Request) (treeResponse, int, error) {
-	entries, err := s.repository.Tree(
-		request.Context(),
-		request.URL.Query().Get("branch"),
-		request.URL.Query().Get("ref"),
-		request.URL.Query().Get("path"),
-	)
-	if err != nil {
-		return treeResponse{}, 0, err
-	}
-	return treeResponse{Entries: entries}, http.StatusOK, nil
-}
-
 func (s *server) content(request *http.Request) (contentResponse, int, error) {
 	content, err := s.repository.Content(
 		request.Context(),
@@ -151,8 +133,6 @@ func handle[T any](next func(*http.Request) (T, int, error)) http.HandlerFunc {
 				writeError(w, http.StatusNotFound, "commit not found")
 			case errors.Is(err, git.ErrInvalidRef):
 				writeError(w, http.StatusBadRequest, "invalid ref")
-			case errors.Is(err, git.ErrTreeNotFound):
-				writeError(w, http.StatusNotFound, "directory not found")
 			case errors.Is(err, git.ErrContentNotFound):
 				writeError(w, http.StatusNotFound, "path not found")
 			case errors.Is(err, context.DeadlineExceeded):

@@ -20,7 +20,6 @@ Configuration:
 ## Endpoints
 
 - `GET /api/v1/repository`
-- `GET /api/v1/tree?path=<directory>`
 - `GET /api/v1/content?path=<file-or-directory>`
 
 Response:
@@ -29,8 +28,8 @@ Response:
 {"defaultBranch":"main"}
 ```
 
-Omit `path` to list the repository root. Tree responses contain the immediate
-children of the requested directory:
+Omit `path` to list the repository root. Content tree responses contain the
+immediate children of the requested directory:
 
 ```json
 {"entries":[{"name":"README.md","path":"README.md","type":"blob","size":123}]}

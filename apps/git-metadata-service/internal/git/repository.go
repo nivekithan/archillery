@@ -16,7 +16,6 @@ var (
 	ErrContentNotFound = errors.New("content not found")
 	ErrInvalidPath     = errors.New("invalid path")
 	ErrInvalidRef      = errors.New("invalid ref")
-	ErrTreeNotFound    = errors.New("tree not found")
 )
 
 type Repository struct {
@@ -105,32 +104,6 @@ func (r *Repository) Summary(ctx context.Context, branch, commit string) (Reposi
 		LatestCommit: commits[0],
 		TotalCommits: totalCommits,
 	}, nil
-}
-
-func (r *Repository) Tree(ctx context.Context, branch, commit, treePath string) ([]TreeEntry, error) {
-	if err := validateTreePath(treePath); err != nil {
-		return nil, err
-	}
-	ref, err := r.revisionRef(ctx, branch, commit)
-	if err != nil {
-		return nil, err
-	}
-
-	treeSpec := ref + "^{tree}"
-	if treePath != "" {
-		treeSpec = ref + ":" + treePath
-	}
-	entries, err := r.commands.tree(ctx, treeSpec, treePath)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, err
-		}
-		if _, ok := errors.AsType[*commandError](err); ok {
-			return nil, fmt.Errorf("%w: %s", ErrTreeNotFound, treePath)
-		}
-		return nil, err
-	}
-	return entries, nil
 }
 
 type RepositoryContent struct {
