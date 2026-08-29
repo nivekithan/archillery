@@ -290,7 +290,7 @@ function CommitDetail() {
             <FileTree
               model={model}
               header={
-                <div className="flex items-center gap-2 border-b px-3 py-2 text-sm font-semibold">
+                <div className="mb-2 flex items-center gap-2 border-b px-3 py-2 text-sm font-semibold">
                   <GitForkIcon className="size-4" />
                   Files changed
                 </div>
