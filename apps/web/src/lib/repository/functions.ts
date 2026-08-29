@@ -3,9 +3,9 @@ import { z } from "zod";
 
 import {
   getRepositoryCommitsFromWorker,
+  getRepositoryContentFromWorker,
   getRepositoryMetadataFromWorker,
   getRepositorySummaryFromWorker,
-  getRepositoryTreeFromWorker,
 } from "./api";
 import {
   BranchNameSchema,
@@ -26,18 +26,18 @@ const RepositoryInputSchema = z.object({
 export const getRepository = createServerFn({ method: "GET" })
   .validator(RepositoryInputSchema)
   .handler(async ({ data }) => {
-    const [repository, summary, tree] = await Promise.all([
+    const [repository, summary, content] = await Promise.all([
       getRepositoryMetadataFromWorker(data),
       // TODO: Make it streaming promise
       getRepositorySummaryFromWorker(data),
-      getRepositoryTreeFromWorker(data),
+      getRepositoryContentFromWorker(data),
     ]);
 
     return {
       branches: repository.branches,
       defaultBranch: repository.defaultBranch,
       ...summary,
-      ...tree,
+      ...content,
     };
   });
 

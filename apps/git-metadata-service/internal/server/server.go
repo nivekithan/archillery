@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nivekithan/archillery/apps/git-metadata-service/internal/git"
 )
@@ -34,6 +36,7 @@ func New(config Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/commits", handle(s.commits))
 	mux.HandleFunc("GET /api/v1/summary", handle(s.summary))
 	mux.HandleFunc("GET /api/v1/tree", handle(s.tree))
+	mux.HandleFunc("GET /api/v1/content", handle(s.content))
 	return mux
 }
 
@@ -59,6 +62,14 @@ func (s *server) repositoryMetadata(request *http.Request) (repositoryResponse, 
 
 type treeResponse struct {
 	Entries []git.TreeEntry `json:"entries"`
+}
+
+type contentResponse struct {
+	Type     string          `json:"type"`
+	Entries  []git.TreeEntry `json:"entries,omitempty"`
+	Contents string          `json:"contents"`
+	IsBinary bool            `json:"isBinary"`
+	Size     int             `json:"size"`
 }
 
 type commitsResponse struct {
@@ -103,6 +114,29 @@ func (s *server) tree(request *http.Request) (treeResponse, int, error) {
 	return treeResponse{Entries: entries}, http.StatusOK, nil
 }
 
+func (s *server) content(request *http.Request) (contentResponse, int, error) {
+	content, err := s.repository.Content(
+		request.Context(),
+		request.URL.Query().Get("branch"),
+		request.URL.Query().Get("ref"),
+		request.URL.Query().Get("path"),
+	)
+	if err != nil {
+		return contentResponse{}, 0, err
+	}
+	if content.Type == "tree" {
+		return contentResponse{Type: "tree", Entries: content.Entries}, http.StatusOK, nil
+	}
+
+	contents := content.Contents
+	isBinary := bytes.IndexByte(contents, 0) >= 0 || !utf8.Valid(contents)
+	response := contentResponse{Type: "blob", IsBinary: isBinary, Size: len(contents)}
+	if !isBinary {
+		response.Contents = string(contents)
+	}
+	return response, http.StatusOK, nil
+}
+
 func handle[T any](next func(*http.Request) (T, int, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		response, status, err := next(request)
@@ -119,6 +153,8 @@ func handle[T any](next func(*http.Request) (T, int, error)) http.HandlerFunc {
 				writeError(w, http.StatusBadRequest, "invalid ref")
 			case errors.Is(err, git.ErrTreeNotFound):
 				writeError(w, http.StatusNotFound, "directory not found")
+			case errors.Is(err, git.ErrContentNotFound):
+				writeError(w, http.StatusNotFound, "path not found")
 			case errors.Is(err, context.DeadlineExceeded):
 				writeError(w, http.StatusGatewayTimeout, "git command timed out")
 			default:

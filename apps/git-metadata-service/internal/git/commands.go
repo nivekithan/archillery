@@ -87,6 +87,18 @@ func (c *commands) tree(ctx context.Context, treeSpec, parentPath string) ([]Tre
 	return parseTreeEntries(output, parentPath)
 }
 
+func (c *commands) blob(ctx context.Context, blobSpec string) ([]byte, error) {
+	return c.output(ctx, "cat-file", "blob", blobSpec)
+}
+
+func (c *commands) objectType(ctx context.Context, objectSpec string) (string, error) {
+	output, err := c.output(ctx, "cat-file", "-t", objectSpec)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 func (c *commands) commits(ctx context.Context, ref string, limit int) ([]Commit, error) {
 	output, err := c.output(
 		ctx,

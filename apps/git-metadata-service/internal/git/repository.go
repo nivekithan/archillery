@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	ErrBranchNotFound = errors.New("branch not found")
-	ErrCommitNotFound = errors.New("commit not found")
-	ErrInvalidPath    = errors.New("invalid path")
-	ErrInvalidRef     = errors.New("invalid ref")
-	ErrTreeNotFound   = errors.New("tree not found")
+	ErrBranchNotFound  = errors.New("branch not found")
+	ErrCommitNotFound  = errors.New("commit not found")
+	ErrContentNotFound = errors.New("content not found")
+	ErrInvalidPath     = errors.New("invalid path")
+	ErrInvalidRef      = errors.New("invalid ref")
+	ErrTreeNotFound    = errors.New("tree not found")
 )
 
 type Repository struct {
@@ -130,6 +131,54 @@ func (r *Repository) Tree(ctx context.Context, branch, commit, treePath string) 
 		return nil, err
 	}
 	return entries, nil
+}
+
+type RepositoryContent struct {
+	Type     string
+	Entries  []TreeEntry
+	Contents []byte
+}
+
+func (r *Repository) Content(ctx context.Context, branch, commit, contentPath string) (RepositoryContent, error) {
+	if err := validateTreePath(contentPath); err != nil {
+		return RepositoryContent{}, err
+	}
+	ref, err := r.revisionRef(ctx, branch, commit)
+	if err != nil {
+		return RepositoryContent{}, err
+	}
+
+	objectSpec := ref + "^{tree}"
+	if contentPath != "" {
+		objectSpec = ref + ":" + contentPath
+	}
+	objectType, err := r.commands.objectType(ctx, objectSpec)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return RepositoryContent{}, err
+		}
+		if _, ok := errors.AsType[*commandError](err); ok {
+			return RepositoryContent{}, fmt.Errorf("%w: %s", ErrContentNotFound, contentPath)
+		}
+		return RepositoryContent{}, err
+	}
+
+	switch objectType {
+	case "tree":
+		entries, err := r.commands.tree(ctx, objectSpec, contentPath)
+		if err != nil {
+			return RepositoryContent{}, err
+		}
+		return RepositoryContent{Type: "tree", Entries: entries}, nil
+	case "blob":
+		contents, err := r.commands.blob(ctx, objectSpec)
+		if err != nil {
+			return RepositoryContent{}, err
+		}
+		return RepositoryContent{Type: "blob", Contents: contents}, nil
+	default:
+		return RepositoryContent{}, fmt.Errorf("%w: %s", ErrContentNotFound, contentPath)
+	}
 }
 
 func (r *Repository) revisionRef(ctx context.Context, branch, commit string) (string, error) {

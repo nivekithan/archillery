@@ -20,6 +20,19 @@ const TreeResponseSchema = z.object({
   ),
 });
 
+const ContentResponseSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("tree"),
+    entries: TreeResponseSchema.shape.entries,
+  }),
+  z.object({
+    type: z.literal("blob"),
+    contents: z.string(),
+    isBinary: z.boolean(),
+    size: z.number().int().nonnegative(),
+  }),
+]);
+
 const CommitSchema = z.object({
   hash: z.string(),
   shortHash: z.string(),
@@ -96,6 +109,38 @@ export const getRepositoryTreeFromWorker = createServerOnlyFn(
       }
       throw error;
     }
+  },
+);
+
+export const getRepositoryContentFromWorker = createServerOnlyFn(
+  async ({
+    branch,
+    path,
+    ref,
+    repo,
+    username,
+  }: {
+    branch?: string;
+    path?: string;
+    ref?: string;
+    repo: string;
+    username: string;
+  }) => {
+    const contentUrl = new URL("https://git-worker");
+    contentUrl.pathname = `/api/repositories/${username}/${repo}/content`;
+    if (branch) contentUrl.searchParams.set("branch", branch);
+    if (path) contentUrl.searchParams.set("path", path);
+    if (ref) contentUrl.searchParams.set("ref", ref);
+
+    const response = await env.GIT_WORKER.fetch(contentUrl);
+    const content = ContentResponseSchema.safeParse(
+      await readWorkerJson(response),
+    );
+    if (!content.success) {
+      throw new Error("Repository service returned an invalid response");
+    }
+
+    return content.data;
   },
 );
 

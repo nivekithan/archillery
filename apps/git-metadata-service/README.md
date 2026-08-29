@@ -21,6 +21,7 @@ Configuration:
 
 - `GET /api/v1/repository`
 - `GET /api/v1/tree?path=<directory>`
+- `GET /api/v1/content?path=<file-or-directory>`
 
 Response:
 
