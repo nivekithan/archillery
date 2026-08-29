@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { preloadDiffsFile } from "@/lib/diffs/ssr";
+
 import {
   getRepositoryCommitsFromWorker,
   getRepositoryContentFromWorker,
@@ -32,12 +34,17 @@ export const getRepository = createServerFn({ method: "GET" })
       getRepositorySummaryFromWorker(data),
       getRepositoryContentFromWorker(data),
     ]);
+    let prerenderedHTML: string | undefined;
+    if (content.type === "blob" && !content.isBinary && data.path) {
+      prerenderedHTML = await preloadDiffsFile(data.path, content.contents);
+    }
 
     return {
       branches: repository.branches,
       defaultBranch: repository.defaultBranch,
       ...summary,
       ...content,
+      prerenderedHTML,
     };
   });
 

@@ -1,6 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { ArrowsClockwiseIcon, GitForkIcon } from "@phosphor-icons/react";
-import { createIsomorphicFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { RepositoryFile } from "@/components/repository-file";
@@ -16,15 +15,10 @@ import {
 } from "@/components/ui/empty";
 import { getRepository } from "@/lib/repository/functions";
 import { TreePathSchema } from "@/lib/repository/schemas";
-import { preloadCodeView } from "@/lib/diffs/highlighter";
 
 const RepositorySearchSchema = z.object({
   path: TreePathSchema.optional().catch(undefined),
 });
-
-const preloadCodeViewForLoader = createIsomorphicFn()
-  .server((_name?: string) => Promise.resolve(false))
-  .client((name?: string) => preloadCodeView(name));
 
 export const Route = createFileRoute("/$username/$repo/")({
   validateSearch: RepositorySearchSchema,
@@ -34,18 +28,15 @@ export const Route = createFileRoute("/$username/$repo/")({
     ref: search.ref,
   }),
   loader: async ({ deps, params }) => {
-    const [repository] = await Promise.all([
-      getRepository({
-        data: {
-          branch: deps.ref ? undefined : deps.branch,
-          path: deps.path,
-          ref: deps.ref,
-          repo: params.repo,
-          username: params.username,
-        },
-      }),
-      preloadCodeViewForLoader(deps.path),
-    ]);
+    const repository = await getRepository({
+      data: {
+        branch: deps.ref ? undefined : deps.branch,
+        path: deps.path,
+        ref: deps.ref,
+        repo: params.repo,
+        username: params.username,
+      },
+    });
     return {
       ...repository,
       loadedAt: Date.now(),
@@ -104,6 +95,7 @@ function Repository() {
           latestCommit={latestCommit}
           loadedAt={loadedAt}
           path={path}
+          prerenderedHTML={repository.prerenderedHTML}
           size={repository.size}
         />
       ) : (

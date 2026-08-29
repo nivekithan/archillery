@@ -9,8 +9,8 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { createDiffsFile, fileOptions } from "@/lib/diffs/file";
 import { formatRelativeTime, formatSize } from "@/lib/repository/format";
-import { hashContents } from "@/lib/utils";
 
 type RepositoryFileProps = {
   contents: string;
@@ -23,14 +23,9 @@ type RepositoryFileProps = {
   };
   loadedAt: number;
   path?: string;
+  prerenderedHTML?: string;
   size: number;
 };
-
-const fileOptions = {
-  disableFileHeader: true,
-  overflow: "scroll",
-  themeType: "light",
-} as const;
 
 export function RepositoryFile({
   contents,
@@ -38,13 +33,11 @@ export function RepositoryFile({
   latestCommit,
   loadedAt,
   path,
+  prerenderedHTML,
   size,
 }: RepositoryFileProps) {
   const name = path ?? "";
-  const cacheKey = useMemo(
-    () => `${name}:${contents.length}:${hashContents(contents)}`,
-    [contents, name],
-  );
+  const file = useMemo(() => createDiffsFile(name, contents), [contents, name]);
 
   if (!path) {
     throw new Error("Repository returned a blob without a path");
@@ -101,9 +94,10 @@ export function RepositoryFile({
             </span>
           </div>
           <DiffsFile
-            key={cacheKey}
-            file={{ name, contents, cacheKey }}
+            key={file.cacheKey}
+            file={file}
             options={fileOptions}
+            prerenderedHTML={prerenderedHTML}
           />
         </div>
       )}
