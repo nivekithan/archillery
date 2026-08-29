@@ -9,32 +9,44 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { RepositoryCommitSummary } from "@/components/repository-commit-summary";
 import { createDiffsFile, fileOptions } from "@/lib/diffs/file";
-import { formatRelativeTime, formatSize } from "@/lib/repository/format";
+import { formatSize } from "@/lib/repository/format";
 
 type RepositoryFileProps = {
+  branch?: string;
   contents: string;
   isBinary: boolean;
   latestCommit: {
     authorName: string;
     committedAt: string;
+    hash: string;
     message: string;
     shortHash: string;
   };
   loadedAt: number;
   path?: string;
   prerenderedHTML?: string;
+  ref?: string;
+  repo: string;
   size: number;
+  totalCommits: number;
+  username: string;
 };
 
 export function RepositoryFile({
+  branch,
   contents,
   isBinary,
   latestCommit,
   loadedAt,
   path,
   prerenderedHTML,
+  ref,
+  repo,
   size,
+  totalCommits,
+  username,
 }: RepositoryFileProps) {
   const name = path ?? "";
   const file = useMemo(() => createDiffsFile(name, contents), [contents, name]);
@@ -50,21 +62,16 @@ export function RepositoryFile({
 
   return (
     <>
-      <div className="flex min-h-11 flex-col gap-2 rounded-lg border bg-card px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 font-semibold">
-            {latestCommit.authorName}
-          </span>
-          <span className="truncate text-muted-foreground">
-            {latestCommit.message}
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-          <code>{latestCommit.shortHash}</code>
-          <span aria-hidden="true">·</span>
-          <span>{formatRelativeTime(latestCommit.committedAt, loadedAt)}</span>
-        </div>
-      </div>
+      <RepositoryCommitSummary
+        branch={branch}
+        className="rounded-lg border"
+        latestCommit={latestCommit}
+        loadedAt={loadedAt}
+        ref={ref}
+        repo={repo}
+        totalCommits={totalCommits}
+        username={username}
+      />
 
       {isBinary ? (
         <Empty className="min-h-72 border">

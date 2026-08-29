@@ -1,6 +1,7 @@
-import { FileIcon, FolderIcon, GitCommitIcon } from "@phosphor-icons/react";
+import { FileIcon, FolderIcon } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 
+import { RepositoryCommitSummary } from "@/components/repository-commit-summary";
 import {
   Empty,
   EmptyDescription,
@@ -16,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatRelativeTime, formatSize } from "@/lib/repository/format";
+import { formatSize } from "@/lib/repository/format";
 
 type RepositoryTreeProps = {
   branch?: string;
@@ -72,39 +73,16 @@ export function RepositoryTree({
 
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="flex min-h-11 flex-col gap-2 border-b bg-muted/30 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 font-semibold">
-            {latestCommit.authorName}
-          </span>
-          <Link
-            to="/$username/$repo"
-            params={{ repo, username }}
-            search={{
-              branch: undefined,
-              path: undefined,
-              ref: latestCommit.hash,
-            }}
-            className="truncate text-muted-foreground transition-colors hover:text-foreground hover:underline"
-          >
-            {latestCommit.message}
-          </Link>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-          <code>{latestCommit.shortHash}</code>
-          <span aria-hidden="true">·</span>
-          <span>{formatRelativeTime(latestCommit.committedAt, loadedAt)}</span>
-          <Link
-            to="/$username/$repo/commits"
-            params={{ repo, username }}
-            search={{ branch: ref ? undefined : branch, ref }}
-            className="ml-2 flex items-center gap-1.5 font-medium text-foreground transition-colors hover:underline"
-          >
-            <GitCommitIcon className="size-4" />
-            {totalCommits} {totalCommits === 1 ? "Commit" : "Commits"}
-          </Link>
-        </div>
-      </div>
+      <RepositoryCommitSummary
+        branch={branch}
+        className="border-b"
+        latestCommit={latestCommit}
+        loadedAt={loadedAt}
+        ref={ref}
+        repo={repo}
+        totalCommits={totalCommits}
+        username={username}
+      />
       <Table aria-label={`Files in ${path || repo}`}>
         <TableHeader className="sr-only">
           <TableHead isRowHeader>Name</TableHead>

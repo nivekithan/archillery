@@ -90,13 +90,18 @@ function Repository() {
 
       {repository.type === "blob" ? (
         <RepositoryFile
+          branch={branch}
           contents={repository.contents}
           isBinary={repository.isBinary}
           latestCommit={latestCommit}
           loadedAt={loadedAt}
           path={path}
           prerenderedHTML={repository.prerenderedHTML}
+          ref={ref}
+          repo={repo}
           size={repository.size}
+          totalCommits={totalCommits}
+          username={username}
         />
       ) : (
         <RepositoryTree
