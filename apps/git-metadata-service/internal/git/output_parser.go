@@ -89,6 +89,26 @@ func parseTreeEntries(output []byte, parentPath string) ([]TreeEntry, error) {
 	return entries, nil
 }
 
+func parseRecursivePaths(output []byte) ([]string, error) {
+	paths := make([]string, 0)
+	for record := range bytes.SplitSeq(output, []byte{0}) {
+		if len(record) == 0 {
+			continue
+		}
+		fields := bytes.SplitN(record, []byte{'\t'}, 2)
+		if len(fields) != 2 {
+			return nil, fmt.Errorf("parse recursive path: unexpected git output")
+		}
+		switch string(fields[0]) {
+		case "tree":
+			paths = append(paths, string(fields[1])+"/")
+		case "blob":
+			paths = append(paths, string(fields[1]))
+		}
+	}
+	return paths, nil
+}
+
 func treeEntryType(mode, objectType string) string {
 	switch mode {
 	case "040000":

@@ -1,6 +1,7 @@
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
 
 import { Toaster } from "@/components/ui/sonner";
+import { AppQueryProvider } from "@/components/app-query-provider";
 
 import appCss from "../styles.css?url";
 
@@ -35,8 +36,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="min-h-screen">
-        {children}
-        <Toaster theme="light" position="top-center" />
+        <AppQueryProvider>
+          {children}
+          <Toaster theme="light" position="top-center" />
+        </AppQueryProvider>
         <Scripts />
       </body>
     </html>

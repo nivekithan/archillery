@@ -9,6 +9,7 @@ import {
   getRepositoryContentFromWorker,
   getRepositoryMetadataFromWorker,
   getRepositorySummaryFromWorker,
+  getRepositoryPathsFromWorker,
 } from "./api";
 import {
   BranchNameSchema,
@@ -116,3 +117,14 @@ export const getRepositoryCommit = createServerFn({ method: "GET" })
     ]);
     return { ...repository, ...detail };
   });
+
+const RepositoryPathsInputSchema = z.object({
+  branch: BranchNameSchema.optional(),
+  ref: CommitHashSchema.optional(),
+  repo: RepositoryNameSchema,
+  username: UsernameSchema,
+});
+
+export const getRepositoryPaths = createServerFn({ method: "GET" })
+  .validator(RepositoryPathsInputSchema)
+  .handler(({ data }) => getRepositoryPathsFromWorker(data));

@@ -203,6 +203,27 @@ func (r *Repository) Content(ctx context.Context, branch, commit, contentPath st
 	}
 }
 
+type RepositoryPaths struct {
+	Commit string   `json:"commit"`
+	Paths  []string `json:"paths"`
+}
+
+func (r *Repository) Paths(ctx context.Context, branch, commit string) (RepositoryPaths, error) {
+	ref, err := r.revisionRef(ctx, branch, commit)
+	if err != nil {
+		return RepositoryPaths{}, err
+	}
+	commitHash, err := r.commands.resolveCommit(ctx, ref)
+	if err != nil {
+		return RepositoryPaths{}, fmt.Errorf("resolve path commit: %w", err)
+	}
+	paths, err := r.commands.recursivePaths(ctx, commitHash)
+	if err != nil {
+		return RepositoryPaths{}, fmt.Errorf("read repository paths: %w", err)
+	}
+	return RepositoryPaths{Commit: commitHash, Paths: paths}, nil
+}
+
 func (r *Repository) revisionRef(ctx context.Context, branch, commit string) (string, error) {
 	if branch != "" && commit != "" {
 		return "", ErrInvalidRef

@@ -22,6 +22,7 @@ Configuration:
 - `GET /api/v1/repository`
 - `GET /api/v1/commit?ref=<commit-hash>`
 - `GET /api/v1/content?path=<file-or-directory>`
+- `GET /api/v1/paths?ref=<commit-hash>`
 
 Response:
 

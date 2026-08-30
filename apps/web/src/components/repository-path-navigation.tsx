@@ -17,10 +17,12 @@ import {
   ComboboxList,
 } from "@/components/ui/combobox";
 import { InputGroupAddon } from "@/components/ui/input-group";
+import { RepositoryPathSearch } from "@/components/repository-path-search";
 
 type RepositoryPathNavigationProps = {
   branch?: string;
   branches: string[];
+  commit: string;
   defaultBranch: string;
   onBranchChange: (value: string | number | null) => void;
   path?: string;
@@ -32,6 +34,7 @@ type RepositoryPathNavigationProps = {
 export function RepositoryPathNavigation({
   branch,
   branches,
+  commit,
   defaultBranch,
   onBranchChange,
   path,
@@ -126,6 +129,14 @@ export function RepositoryPathNavigation({
           })}
         </BreadcrumbList>
       </Breadcrumb>
+
+      <RepositoryPathSearch
+        branch={branch}
+        commit={commit}
+        ref={ref}
+        repo={repo}
+        username={username}
+      />
     </div>
   );
 }

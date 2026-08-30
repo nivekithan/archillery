@@ -88,6 +88,7 @@ function Repository() {
       <RepositoryPathNavigation
         branch={branch}
         branches={branches}
+        commit={latestCommit.hash}
         defaultBranch={defaultBranch}
         onBranchChange={selectBranch}
         path={path}

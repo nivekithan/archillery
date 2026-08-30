@@ -57,6 +57,11 @@ const RepositorySummaryResponseSchema = z.object({
   totalCommits: z.number().int().nonnegative(),
 });
 
+const RepositoryPathsResponseSchema = z.object({
+  commit: z.string(),
+  paths: z.array(z.string()),
+});
+
 export const getRepositoryMetadataFromWorker = createServerOnlyFn(
   async ({ repo, username }: { repo: string; username: string }) => {
     const repositoryUrl = new URL("https://git-worker");
@@ -198,5 +203,33 @@ export const getRepositorySummaryFromWorker = createServerOnlyFn(
     }
 
     return summary.data;
+  },
+);
+
+export const getRepositoryPathsFromWorker = createServerOnlyFn(
+  async ({
+    branch,
+    ref,
+    repo,
+    username,
+  }: {
+    branch?: string;
+    ref?: string;
+    repo: string;
+    username: string;
+  }) => {
+    const pathsUrl = new URL("https://git-worker");
+    pathsUrl.pathname = `/api/repositories/${username}/${repo}/paths`;
+    if (branch) pathsUrl.searchParams.set("branch", branch);
+    if (ref) pathsUrl.searchParams.set("ref", ref);
+
+    const response = await env.GIT_WORKER.fetch(pathsUrl);
+    const paths = RepositoryPathsResponseSchema.safeParse(
+      await readWorkerJson(response),
+    );
+    if (!paths.success) {
+      throw new Error("Repository service returned an invalid response");
+    }
+    return paths.data;
   },
 );

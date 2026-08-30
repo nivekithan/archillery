@@ -37,7 +37,20 @@ func New(config Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/commits", handle(s.commits))
 	mux.HandleFunc("GET /api/v1/summary", handle(s.summary))
 	mux.HandleFunc("GET /api/v1/content", handle(s.content))
+	mux.HandleFunc("GET /api/v1/paths", handle(s.paths))
 	return mux
+}
+
+func (s *server) paths(request *http.Request) (git.RepositoryPaths, int, error) {
+	paths, err := s.repository.Paths(
+		request.Context(),
+		request.URL.Query().Get("branch"),
+		request.URL.Query().Get("ref"),
+	)
+	if err != nil {
+		return git.RepositoryPaths{}, 0, err
+	}
+	return paths, http.StatusOK, nil
 }
 
 type repositoryResponse struct {

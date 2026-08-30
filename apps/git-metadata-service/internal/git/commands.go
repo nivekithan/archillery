@@ -87,6 +87,31 @@ func (c *commands) tree(ctx context.Context, treeSpec, parentPath string) ([]Tre
 	return parseTreeEntries(output, parentPath)
 }
 
+func (c *commands) recursivePaths(ctx context.Context, ref string) ([]string, error) {
+	output, err := c.output(
+		ctx,
+		"ls-tree",
+		"-r",
+		"-t",
+		"-z",
+		"--full-tree",
+		"--format=%(objecttype)%x09%(path)",
+		ref,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return parseRecursivePaths(output)
+}
+
+func (c *commands) resolveCommit(ctx context.Context, ref string) (string, error) {
+	output, err := c.output(ctx, "rev-parse", "--verify", ref+"^{commit}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 func (c *commands) blob(ctx context.Context, blobSpec string) ([]byte, error) {
 	return c.output(ctx, "cat-file", "blob", blobSpec)
 }
