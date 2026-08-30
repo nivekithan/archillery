@@ -7,7 +7,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import fuzzysort from "fuzzysort";
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useContext, useDeferredValue, useMemo, useRef, useState } from "react";
+import { ComboBoxStateContext } from "react-aria-components";
 
 import {
   Combobox,
@@ -110,10 +111,6 @@ export function RepositoryPathSearch({
       inputValue={query}
       menuTrigger="focus"
       value={null}
-      onChange={(path) => {
-        const result = results.find((item) => item.path === path);
-        if (result) openResult(result);
-      }}
       onInputChange={setQuery}
       className="w-full sm:ml-auto sm:w-80"
     >
@@ -149,20 +146,41 @@ export function RepositoryPathSearch({
           )}
         >
           {(result) => (
-            <ComboboxItem id={result.path} textValue={result.path}>
-              {result.type === "tree" ? (
-                <FolderIcon weight="fill" className="text-accent" />
-              ) : (
-                <FileIcon weight="fill" className="text-muted-foreground" />
-              )}
-              <span className="min-w-0 truncate">
-                <HighlightedPath indexes={result.indexes} path={result.path} />
-              </span>
-            </ComboboxItem>
+            <RepositoryPathItem result={result} onAction={openResult} />
           )}
         </ComboboxList>
       </ComboboxContent>
     </Combobox>
+  );
+}
+
+function RepositoryPathItem({
+  onAction,
+  result,
+}: {
+  onAction: (result: PathResult) => void;
+  result: PathResult;
+}) {
+  const state = useContext(ComboBoxStateContext);
+
+  return (
+    <ComboboxItem
+      id={result.path}
+      textValue={result.path}
+      onAction={() => {
+        state?.close();
+        onAction(result);
+      }}
+    >
+      {result.type === "tree" ? (
+        <FolderIcon weight="fill" className="text-accent" />
+      ) : (
+        <FileIcon weight="fill" className="text-muted-foreground" />
+      )}
+      <span className="min-w-0 truncate">
+        <HighlightedPath indexes={result.indexes} path={result.path} />
+      </span>
+    </ComboboxItem>
   );
 }
 
