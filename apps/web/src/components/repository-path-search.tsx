@@ -7,27 +7,31 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import fuzzysort from "fuzzysort";
-import { useContext, useDeferredValue, useMemo, useRef, useState } from "react";
-import { ComboBoxStateContext } from "react-aria-components";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox";
-import { InputGroupAddon } from "@/components/ui/input-group";
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Popover } from "@/components/ui/popover";
 import { getRepositoryPaths } from "@/lib/repository/functions";
 
 type PathResult = {
+  id: string;
   indexes: ReadonlyArray<number>;
   path: string;
   type: "blob" | "tree";
 };
 
 type PathTarget = {
+  id: string;
   path: string;
   type: PathResult["type"];
 };
@@ -49,7 +53,13 @@ export function RepositoryPathSearch({
 }: RepositoryPathSearchProps) {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
+  const pointerPositionRef = useRef<{ x: number; y: number }>(null);
+  const listboxId = useId();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const pathsQuery = useQuery({
     queryKey: ["repository-paths", username, repo, commit],
     queryFn: () =>
@@ -60,7 +70,7 @@ export function RepositoryPathSearch({
           ? "tree"
           : "blob";
         const path = type === "tree" ? encodedPath.slice(0, -1) : encodedPath;
-        return { path, type };
+        return { id: path, path, type };
       });
       return {
         index: fuzzysort.snapshot<PathTarget>(targets, { key: "path" }),
@@ -75,22 +85,31 @@ export function RepositoryPathSearch({
 
   const pathIndex = pathsQuery.data?.index;
   const normalizedQuery = query.trim();
-  const deferredQuery = useDeferredValue(normalizedQuery);
   const results = useMemo<PathResult[]>(() => {
-    if (!deferredQuery) return pathsQuery.data?.rootEntries ?? [];
+    if (!debouncedQuery) return pathsQuery.data?.rootEntries ?? [];
     if (!pathIndex) return [];
     return fuzzysort
-      .go(deferredQuery, pathIndex, { limit: 20, threshold: 0 })
+      .go(debouncedQuery, pathIndex, { limit: 20, threshold: 0 })
       .map((result) => ({
+        id: result.obj.id,
         indexes: result.indexes,
         path: result.obj.path,
         type: result.obj.type,
       }));
-  }, [deferredQuery, pathIndex, pathsQuery.data?.rootEntries]);
+  }, [debouncedQuery, pathIndex, pathsQuery.data?.rootEntries]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedQuery(normalizedQuery),
+      150,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [normalizedQuery]);
 
   function openResult(result: PathResult) {
-    inputRef.current?.blur();
+    setIsOpen(false);
     setQuery("");
+    inputRef.current?.blur();
     void navigate({
       to: "/$username/$repo",
       params: { repo, username },
@@ -101,40 +120,143 @@ export function RepositoryPathSearch({
   const isLoading =
     pathsQuery.isPending ||
     (pathsQuery.isSuccess && !pathIndex) ||
-    deferredQuery !== normalizedQuery;
+    debouncedQuery !== normalizedQuery;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    listboxRef.current
+      ?.querySelector<HTMLElement>(`[data-option-index="${activeIndex}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, isOpen, results]);
 
   return (
-    <Combobox<PathResult>
-      allowsCustomValue
-      allowsEmptyCollection
-      defaultFilter={() => true}
-      inputValue={query}
-      menuTrigger="focus"
-      value={null}
-      onInputChange={setQuery}
-      className="w-full sm:ml-auto sm:w-80"
-    >
-      <ComboboxInput
-        ref={inputRef}
-        aria-label="Search repository files"
-        placeholder="Go to file"
-        showTrigger={false}
-        className="w-full"
-      >
+    <div className="relative w-full sm:ml-auto sm:w-80">
+      <InputGroup>
         <InputGroupAddon>
           <MagnifyingGlassIcon />
         </InputGroupAddon>
+        <InputGroupInput
+          ref={inputRef}
+          role="combobox"
+          aria-activedescendant={
+            isOpen && results.length > 0
+              ? `${listboxId}-option-${Math.min(activeIndex, results.length - 1)}`
+              : undefined
+          }
+          aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-expanded={isOpen}
+          aria-label="Search repository files"
+          autoComplete="off"
+          placeholder="Go to file"
+          spellCheck={false}
+          type="search"
+          value={query}
+          onBlur={() => setIsOpen(false)}
+          onChange={(event) => {
+            setActiveIndex(0);
+            setIsOpen(true);
+            setQuery(event.target.value);
+          }}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setIsOpen(false);
+              inputRef.current?.blur();
+              return;
+            }
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setIsOpen(true);
+              if (results.length === 0) return;
+              setActiveIndex((index) =>
+                event.key === "ArrowDown"
+                  ? (index + 1) % results.length
+                  : (index - 1 + results.length) % results.length,
+              );
+              return;
+            }
+            if (event.key === "Home" && isOpen && results.length > 0) {
+              event.preventDefault();
+              setActiveIndex(0);
+              return;
+            }
+            if (event.key === "End" && isOpen && results.length > 0) {
+              event.preventDefault();
+              setActiveIndex(results.length - 1);
+              return;
+            }
+            if (event.key === "Enter" && isOpen && results.length > 0) {
+              event.preventDefault();
+              openResult(results[Math.min(activeIndex, results.length - 1)]);
+            }
+          }}
+        />
         {isLoading && (
           <InputGroupAddon align="inline-end">
             <SpinnerGapIcon className="animate-spin" />
           </InputGroupAddon>
         )}
-      </ComboboxInput>
-      <ComboboxContent className="max-h-[min(28rem,65vh)] min-w-72 sm:w-120">
-        <ComboboxList
-          items={results}
-          renderEmptyState={() => (
-            <ComboboxEmpty>
+      </InputGroup>
+      <Popover
+        isOpen={isOpen}
+        isNonModal
+        placement="bottom end"
+        trigger="MenuTrigger"
+        triggerRef={inputRef}
+        onOpenChange={setIsOpen}
+        className="w-(--trigger-width) min-w-72 overflow-hidden p-0 data-exiting:hidden data-exiting:animate-none sm:w-120"
+      >
+        <div
+          ref={listboxRef}
+          id={listboxId}
+          role="listbox"
+          aria-label="Repository paths"
+          className="max-h-[min(28rem,65vh)] overflow-y-auto p-1"
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          {results.length > 0 ? (
+            results.map((result, index) => (
+              <button
+                id={`${listboxId}-option-${index}`}
+                key={result.id}
+                type="button"
+                role="option"
+                aria-selected={index === activeIndex}
+                data-option-index={index}
+                tabIndex={-1}
+                className="flex w-full cursor-default items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm outline-none aria-selected:bg-muted aria-selected:text-foreground"
+                onClick={() => openResult(result)}
+                onPointerMove={(event) => {
+                  const pointerPosition = pointerPositionRef.current;
+                  if (
+                    pointerPosition?.x === event.clientX &&
+                    pointerPosition.y === event.clientY
+                  ) {
+                    return;
+                  }
+                  pointerPositionRef.current = {
+                    x: event.clientX,
+                    y: event.clientY,
+                  };
+                  setActiveIndex(index);
+                }}
+              >
+                {result.type === "tree" ? (
+                  <FolderIcon weight="fill" className="text-accent" />
+                ) : (
+                  <FileIcon weight="fill" className="text-muted-foreground" />
+                )}
+                <span className="min-w-0 truncate">
+                  <HighlightedPath
+                    indexes={result.indexes}
+                    path={result.path}
+                  />
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="py-2 text-center text-sm text-muted-foreground">
               {pathsQuery.isError
                 ? "Could not load repository paths."
                 : pathsQuery.isPending || !pathIndex
@@ -142,45 +264,11 @@ export function RepositoryPathSearch({
                   : normalizedQuery.length === 0
                     ? "This repository is empty."
                     : "No matching paths found."}
-            </ComboboxEmpty>
+            </div>
           )}
-        >
-          {(result) => (
-            <RepositoryPathItem result={result} onAction={openResult} />
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
-  );
-}
-
-function RepositoryPathItem({
-  onAction,
-  result,
-}: {
-  onAction: (result: PathResult) => void;
-  result: PathResult;
-}) {
-  const state = useContext(ComboBoxStateContext);
-
-  return (
-    <ComboboxItem
-      id={result.path}
-      textValue={result.path}
-      onAction={() => {
-        state?.close();
-        onAction(result);
-      }}
-    >
-      {result.type === "tree" ? (
-        <FolderIcon weight="fill" className="text-accent" />
-      ) : (
-        <FileIcon weight="fill" className="text-muted-foreground" />
-      )}
-      <span className="min-w-0 truncate">
-        <HighlightedPath indexes={result.indexes} path={result.path} />
-      </span>
-    </ComboboxItem>
+        </div>
+      </Popover>
+    </div>
   );
 }
 
