@@ -5,6 +5,7 @@ import {
   SpinnerGapIcon,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
+import { useHotkey, useHotkeys } from "@tanstack/react-hotkeys";
 import { useNavigate } from "@tanstack/react-router";
 import fuzzysort from "fuzzysort";
 import {
@@ -20,6 +21,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { Kbd } from "@/components/ui/kbd";
 import { Popover } from "@/components/ui/popover";
 import { getRepositoryPaths } from "@/lib/repository/functions";
 
@@ -129,6 +131,62 @@ export function RepositoryPathSearch({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeIndex, isOpen, results]);
 
+  useHotkey("T", () => inputRef.current?.focus(), {
+    ignoreInputs: true,
+    preventDefault: true,
+  });
+
+  useHotkeys(
+    [
+      {
+        hotkey: "Escape",
+        callback: () => {
+          setIsOpen(false);
+          inputRef.current?.blur();
+        },
+      },
+      {
+        hotkey: "ArrowDown",
+        callback: () => {
+          setIsOpen(true);
+          if (results.length === 0) return;
+          setActiveIndex((index) => (index + 1) % results.length);
+        },
+      },
+      {
+        hotkey: "ArrowUp",
+        callback: () => {
+          setIsOpen(true);
+          if (results.length === 0) return;
+          setActiveIndex(
+            (index) => (index - 1 + results.length) % results.length,
+          );
+        },
+      },
+      {
+        hotkey: "Home",
+        callback: () => setActiveIndex(0),
+        options: { enabled: isOpen && results.length > 0 },
+      },
+      {
+        hotkey: "End",
+        callback: () => setActiveIndex(results.length - 1),
+        options: { enabled: isOpen && results.length > 0 },
+      },
+      {
+        hotkey: "Enter",
+        callback: () =>
+          openResult(results[Math.min(activeIndex, results.length - 1)]),
+        options: { enabled: isOpen && results.length > 0 },
+      },
+    ],
+    {
+      target: inputRef,
+      ignoreInputs: false,
+      preventDefault: true,
+    },
+  );
+
   return (
     <div className="relative w-full sm:ml-auto sm:w-80">
       <InputGroup>
@@ -159,42 +217,14 @@ export function RepositoryPathSearch({
             setQuery(event.target.value);
           }}
           onFocus={() => setIsOpen(true)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              setIsOpen(false);
-              inputRef.current?.blur();
-              return;
-            }
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-              event.preventDefault();
-              setIsOpen(true);
-              if (results.length === 0) return;
-              setActiveIndex((index) =>
-                event.key === "ArrowDown"
-                  ? (index + 1) % results.length
-                  : (index - 1 + results.length) % results.length,
-              );
-              return;
-            }
-            if (event.key === "Home" && isOpen && results.length > 0) {
-              event.preventDefault();
-              setActiveIndex(0);
-              return;
-            }
-            if (event.key === "End" && isOpen && results.length > 0) {
-              event.preventDefault();
-              setActiveIndex(results.length - 1);
-              return;
-            }
-            if (event.key === "Enter" && isOpen && results.length > 0) {
-              event.preventDefault();
-              openResult(results[Math.min(activeIndex, results.length - 1)]);
-            }
-          }}
         />
-        {isLoading && (
+        {isLoading ? (
           <InputGroupAddon align="inline-end">
             <SpinnerGapIcon className="animate-spin" />
+          </InputGroupAddon>
+        ) : (
+          <InputGroupAddon align="inline-end">
+            <Kbd>T</Kbd>
           </InputGroupAddon>
         )}
       </InputGroup>
