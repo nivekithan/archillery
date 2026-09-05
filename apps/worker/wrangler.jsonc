@@ -13,7 +13,6 @@
   },
   "vars": {
     "GIT_USERNAME": "nivekithan",
-    "ARCHIL_META_DISK": "dsk-00000000000642d2",
     "ARCHIL_REGION": "aws-us-east-1",
     "ARCHIL_SANDBOX_IMAGE": "ghcr.io/nivekithan/archillery@sha256:40902927766152311cf2a6436b2b177e335a04a0dafb9bdf72079d1f15a62c03",
     "GIT_IDLE_TIMEOUT_SECONDS": 900,

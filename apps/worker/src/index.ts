@@ -19,6 +19,12 @@ type AppEnv = { Bindings: AppBindings };
 
 const workerEnv: AppBindings = env;
 const app = new Hono<AppEnv>();
+const RECOVERABLE_GATEWAY_STATUSES = new Set([404, 502, 503, 504]);
+
+type RepositoryOrigin = {
+  gitGatewayUrl: string;
+  repository: DurableObjectStub<GitRepository> | null;
+};
 
 const requireAuth = basicAuth({
   password: env.GIT_PASSWORD,
@@ -45,22 +51,19 @@ app.post("/api/repositories", requireAuth, async (c) => {
 
   const repoKey = getRepoKey({ repo, username });
 
-  const [manageDisk, repoDisk] = await Promise.all([
-    archil.getDisk(c.env.ARCHIL_META_DISK),
-    archil.createDisk({ name: getDiskName({ repoKey }) }),
-  ]);
+  const repoDisk = await archil.createDisk({ name: getDiskName({ repoKey }) });
 
   const token = repoDisk.token;
 
   if (!token) throw new Error("Expected archil disk token to be returned");
 
-  /**
-   * Who needs a database when you have **DISK**
-   */
-  await manageDisk.putObject(
-    repoKey,
-    JSON.stringify({ diskId: repoDisk.disk.id, token }),
-  );
+  const repository = c.env.GIT_REPOSITORY.getByName(repoKey);
+  await repository.initializeRepository({
+    diskId: repoDisk.disk.id,
+    mountToken: token,
+    repoName: repo,
+    repoUsername: username,
+  });
   await c.env.SANDBOX_QUEUE.send({ repo, username });
 
   return c.json({ ok: true });
@@ -77,18 +80,16 @@ app.delete("/api/repositories/:username/:repo", requireAuth, async (c) => {
 
   const repoKey = getRepoKey({ repo, username });
 
-  const manageDisk = await archil.getDisk(c.env.ARCHIL_META_DISK);
-  const repoDisk = await getRepoDisk({ manageDisk, repoKey });
-  if (!repoDisk) return c.json({ error: "repository not found" }, 404);
-
   const repository = c.env.GIT_REPOSITORY.getByName(repoKey);
+  const config = await repository.getRepositoryConfig();
+  if (!config) return c.json({ error: "repository not found" }, 404);
+
   const { sandboxId } = await repository.deleteRepository();
-  const disk = await archil.getDisk(repoDisk.diskId);
+  const disk = await archil.getDisk(config.diskId);
   await disk.delete();
-  await manageDisk.deleteObject(repoKey);
 
   console.info("Git repository deleted", {
-    diskId: repoDisk.diskId,
+    diskId: config.diskId,
     repoKey,
     sandboxId,
   });
@@ -98,7 +99,6 @@ app.delete("/api/repositories/:username/:repo", requireAuth, async (c) => {
 app.get("/api/repositories/:username/:repo", (c) =>
   proxyGitMetadataServiceRequest({
     apiPath: "/api/v1/repository",
-    metaDiskId: c.env.ARCHIL_META_DISK,
     originToken: c.env.GIT_PASSWORD,
     repositories: c.env.GIT_REPOSITORY,
     repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -109,7 +109,6 @@ app.get("/api/repositories/:username/:repo", (c) =>
 app.get("/api/repositories/:username/:repo/content", (c) =>
 	proxyGitMetadataServiceRequest({
 		apiPath: "/api/v1/content",
-		metaDiskId: c.env.ARCHIL_META_DISK,
 		originToken: c.env.GIT_PASSWORD,
 		repositories: c.env.GIT_REPOSITORY,
 		repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -120,7 +119,6 @@ app.get("/api/repositories/:username/:repo/content", (c) =>
 app.get("/api/repositories/:username/:repo/paths", (c) =>
   proxyGitMetadataServiceRequest({
     apiPath: "/api/v1/paths",
-    metaDiskId: c.env.ARCHIL_META_DISK,
     originToken: c.env.GIT_PASSWORD,
     repositories: c.env.GIT_REPOSITORY,
     repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -131,7 +129,6 @@ app.get("/api/repositories/:username/:repo/paths", (c) =>
 app.get("/api/repositories/:username/:repo/commits", (c) =>
   proxyGitMetadataServiceRequest({
     apiPath: "/api/v1/commits",
-    metaDiskId: c.env.ARCHIL_META_DISK,
     originToken: c.env.GIT_PASSWORD,
     repositories: c.env.GIT_REPOSITORY,
     repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -142,7 +139,6 @@ app.get("/api/repositories/:username/:repo/commits", (c) =>
 app.get("/api/repositories/:username/:repo/commit", (c) =>
   proxyGitMetadataServiceRequest({
     apiPath: "/api/v1/commit",
-    metaDiskId: c.env.ARCHIL_META_DISK,
     originToken: c.env.GIT_PASSWORD,
     repositories: c.env.GIT_REPOSITORY,
     repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -153,7 +149,6 @@ app.get("/api/repositories/:username/:repo/commit", (c) =>
 app.get("/api/repositories/:username/:repo/summary", (c) =>
   proxyGitMetadataServiceRequest({
     apiPath: "/api/v1/summary",
-    metaDiskId: c.env.ARCHIL_META_DISK,
     originToken: c.env.GIT_PASSWORD,
     repositories: c.env.GIT_REPOSITORY,
     repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -170,7 +165,6 @@ app.get(
   gitSmartHttpAuth,
   (c) =>
     proxyGitSmartHttpRequest({
-      metaDiskId: c.env.ARCHIL_META_DISK,
       originToken: c.env.GIT_PASSWORD,
       repositories: c.env.GIT_REPOSITORY,
       repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -179,7 +173,6 @@ app.get(
 );
 app.post("/:username/:repo/git-upload-pack", gitSmartHttpAuth, (c) =>
   proxyGitSmartHttpRequest({
-    metaDiskId: c.env.ARCHIL_META_DISK,
     originToken: c.env.GIT_PASSWORD,
     repositories: c.env.GIT_REPOSITORY,
     repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -188,7 +181,6 @@ app.post("/:username/:repo/git-upload-pack", gitSmartHttpAuth, (c) =>
 );
 app.post("/:username/:repo/git-receive-pack", gitSmartHttpAuth, (c) =>
   proxyGitSmartHttpRequest({
-    metaDiskId: c.env.ARCHIL_META_DISK,
     originToken: c.env.GIT_PASSWORD,
     repositories: c.env.GIT_REPOSITORY,
     repositoryParams: RepoNameSchema.parse(c.req.param()),
@@ -197,14 +189,12 @@ app.post("/:username/:repo/git-receive-pack", gitSmartHttpAuth, (c) =>
 );
 
 async function proxyGitSmartHttpRequest({
-  metaDiskId,
   originToken,
   repositories,
   repositoryParams,
   request,
 }: RepositoryRequestOptions) {
   const origin = await getRepositoryOrigin({
-    metaDiskId,
     originToken,
     repositories,
     repositoryParams,
@@ -214,23 +204,21 @@ async function proxyGitSmartHttpRequest({
     return Response.json({ error: "repository not found" }, { status: 404 });
   }
 
-  return requestGitGateway({
+  return requestGitGatewayWithRecovery({
+    origin,
     request,
-    gitGatewayUrl: origin.gitGatewayUrl,
     originToken,
   });
 }
 
 async function proxyGitMetadataServiceRequest({
   apiPath,
-  metaDiskId,
   originToken,
   repositories,
   repositoryParams,
   request,
 }: RepositoryRequestOptions & { apiPath: string }) {
   const origin = await getRepositoryOrigin({
-    metaDiskId,
     originToken,
     repositories,
     repositoryParams,
@@ -242,25 +230,77 @@ async function proxyGitMetadataServiceRequest({
 
   const requestUrl = new URL(request.url);
   requestUrl.pathname = apiPath;
-  return requestGitGateway({
+  return requestGitGatewayWithRecovery({
+    origin,
     request: new Request(requestUrl, {
       headers: request.headers,
       method: request.method,
     }),
-    gitGatewayUrl: origin.gitGatewayUrl,
     originToken,
   });
 }
 
-async function getRepositoryOrigin({
-  metaDiskId,
+async function requestGitGatewayWithRecovery({
+  origin,
   originToken,
+  request,
+}: {
+  origin: RepositoryOrigin;
+  originToken: string;
+  request: Request;
+}) {
+  let response: Response;
+  try {
+    response = await requestGitGateway({
+      request,
+      gitGatewayUrl: origin.gitGatewayUrl,
+      originToken,
+    });
+  } catch (error) {
+    await recoverGitGatewayIfMissing({ error, repository: origin.repository });
+    throw error;
+  }
+
+  if (isRecoverableGatewayStatus(response.status)) {
+    await recoverGitGatewayIfMissing({ repository: origin.repository });
+  }
+
+  return response;
+}
+
+async function recoverGitGatewayIfMissing({
+  error,
+  repository,
+}: {
+  error?: unknown;
+  repository: DurableObjectStub<GitRepository> | null;
+}) {
+  if (!repository) return;
+
+  console.warn("Git gateway failed; checking sandbox existence", { error });
+  try {
+    await repository.recoverGitGatewayIfMissing();
+  } catch (recoveryError) {
+    console.error("Failed to recover missing Git sandbox", { recoveryError });
+  }
+}
+
+function isRecoverableGatewayStatus(status: number) {
+  return (
+    RECOVERABLE_GATEWAY_STATUSES.has(status) || (status >= 520 && status <= 527)
+  );
+}
+
+async function getRepositoryOrigin({
   repositories,
   repositoryParams: { repo, username },
   request,
 }: RepositoryRequestOptions) {
   if (workerEnv.GIT_GATEWAY_URL) {
-    return { gitGatewayUrl: workerEnv.GIT_GATEWAY_URL };
+    return {
+      gitGatewayUrl: workerEnv.GIT_GATEWAY_URL,
+      repository: null,
+    };
   }
 
   const repoKey = getRepoKey({ repo, username });
@@ -271,54 +311,14 @@ async function getRepositoryOrigin({
     repoKey,
   });
 
-  const manageDisk = await archil.getDisk(metaDiskId);
-  const repoDisk = await getRepoDisk({
-    manageDisk,
-    repoKey,
-  });
-
-  if (!repoDisk) {
-    console.warn("Git repository disk not found", { repoKey });
-    return null;
-  }
-
   const repository = repositories.getByName(repoKey);
-  const gitGatewayHost = await repository.getGitGatewayHost({
-    diskId: repoDisk.diskId,
-    mountToken: repoDisk.token,
-    // TODO: Figure out a way to create a separate origin token for each repo
-    originToken,
-    repoName: repo,
-    repoUsername: username,
-  });
+  const gitGatewayHost = await repository.getGitGatewayHost();
+  if (!gitGatewayHost) return null;
 
-  return { gitGatewayUrl: `https://${gitGatewayHost}` };
-}
-
-async function getRepoDisk({
-  manageDisk,
-  repoKey,
-}: {
-  manageDisk: archil.Disk;
-  repoKey: string;
-}) {
-  try {
-    const file = await manageDisk.getObject(repoKey);
-    const credentials = JSON.parse(new TextDecoder().decode(file));
-
-    return RepoDiskSchema.parse(credentials);
-  } catch (error) {
-    if (error instanceof archil.ArchilS3Error && error.status === 404) {
-      console.warn("Repository disk metadata not found", { repoKey });
-      return null;
-    }
-
-    console.warn("Failed to load repository disk metadata", {
-      error,
-      repoKey,
-    });
-    throw error;
-  }
+  return {
+    gitGatewayUrl: `https://${gitGatewayHost}`,
+    repository,
+  };
 }
 
 function getRepoKey({ repo, username }: { repo: string; username: string }) {
@@ -350,17 +350,11 @@ const RepoNameSchema = z.object({
 type RepositoryParams = z.infer<typeof RepoNameSchema>;
 
 type RepositoryRequestOptions = {
-  metaDiskId: string;
   originToken: string;
   repositories: Cloudflare.Env["GIT_REPOSITORY"];
   repositoryParams: RepositoryParams;
   request: Request;
 };
-
-const RepoDiskSchema = z.object({
-  diskId: z.string(),
-  token: z.string(),
-});
 
 const worker = {
   fetch: app.fetch,
@@ -370,20 +364,11 @@ const worker = {
       const repoKey = getRepoKey({ repo, username });
       console.info("Prewarming Git sandbox", { repoKey });
 
-      const manageDisk = await archil.getDisk(workerEnv.ARCHIL_META_DISK);
-      const repoDisk = await getRepoDisk({ manageDisk, repoKey });
-      if (!repoDisk) {
-        throw new Error(`Repository disk metadata not found for ${repoKey}`);
-      }
-
       const repository = workerEnv.GIT_REPOSITORY.getByName(repoKey);
-      await repository.getGitGatewayHost({
-        diskId: repoDisk.diskId,
-        mountToken: repoDisk.token,
-        originToken: workerEnv.GIT_PASSWORD,
-        repoName: repo,
-        repoUsername: username,
-      });
+      const gitGatewayHost = await repository.getGitGatewayHost();
+      if (!gitGatewayHost) {
+        throw new Error(`Repository configuration not found for ${repoKey}`);
+      }
       console.info("Git sandbox prewarmed", { repoKey });
     }
   },

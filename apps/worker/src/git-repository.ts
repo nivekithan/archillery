@@ -14,15 +14,17 @@ const GitGatewaySchema = z.object({
 const SandboxStateSchema = z.object({
   sandboxId: z.string().nonempty(),
   hostname: z.string().nonempty(),
+  verifiedAt: z.number().int().nonnegative().optional(),
 });
 
-type GitGatewayOptions = {
-  diskId: string;
-  mountToken: string;
-  originToken: string;
-  repoName: string;
-  repoUsername: string;
-};
+const RepositoryConfigSchema = z.object({
+  diskId: z.string().nonempty(),
+  mountToken: z.string().nonempty(),
+  repoName: z.string().nonempty(),
+  repoUsername: z.string().nonempty(),
+});
+
+export type RepositoryConfig = z.infer<typeof RepositoryConfigSchema>;
 
 const CREATE_GIT_GATEWAY_COMMAND = [
   "archil-sandbox services create",
@@ -38,13 +40,14 @@ const CREATE_GIT_GATEWAY_COMMAND = [
 
 export class GitRepository extends DurableObject<CloudflareBindings> {
   private static readonly MAX_TTL = 60 * 60 * 8;
-  private static readonly SANDBOX_CACHE_TTL_MS = 10 * 60 * 1000;
+  private static readonly ACTIVITY_WRITE_INTERVAL_MS = 30 * 1000;
+  private static readonly SANDBOX_VERIFICATION_TTL_MS = 10 * 60 * 1000;
+  private static readonly REPOSITORY_CONFIG_KEY = "REPOSITORY_CONFIG";
   private static readonly SANDBOX_STATE_KEY = "SANDBOX_STATE";
   private static readonly LAST_PING_KEY = "LAST_PING";
 
   private readonly archil: Archil;
   private readonly idleTimeoutMs: number;
-  private cachedArchilSandbox: { sandbox: Sandbox; expiresAt: number } | null;
   private pendingGitGateway: Promise<string> | null;
 
   constructor(ctx: DurableObjectState, env: CloudflareBindings) {
@@ -54,15 +57,29 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       region: env.ARCHIL_REGION,
     });
     this.idleTimeoutMs = env.GIT_IDLE_TIMEOUT_SECONDS * 1000;
-    this.cachedArchilSandbox = null;
     this.pendingGitGateway = null;
   }
 
-  async getGitGatewayHost(options: GitGatewayOptions) {
-    const { diskId, repoName, repoUsername } = options;
+  initializeRepository(config: RepositoryConfig) {
+    const parsedConfig = RepositoryConfigSchema.parse(config);
+    this.ctx.storage.kv.put(
+      GitRepository.REPOSITORY_CONFIG_KEY,
+      JSON.stringify(parsedConfig),
+    );
+  }
+
+  getRepositoryConfig() {
+    return this.readRepositoryConfig();
+  }
+
+  async getGitGatewayHost() {
+    const config = this.readRepositoryConfig();
+    if (!config) return null;
+
+    const { diskId, repoName, repoUsername } = config;
     console.info("Resolving Git sandbox", { diskId, repoName, repoUsername });
     const pendingGitGateway = (this.pendingGitGateway ??=
-      this.createOrReuseGitGateway(options));
+      this.resolveGitGateway(config));
 
     let hostname: string;
     try {
@@ -73,42 +90,68 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       }
     }
 
-    await this.ping();
+    this.recordActivity();
     return hostname;
   }
 
-  private async createOrReuseGitGateway({
-    diskId,
-    mountToken,
-    originToken,
-    repoName,
-    repoUsername,
-  }: GitGatewayOptions) {
+  async recoverGitGatewayIfMissing() {
+    const config = this.readRepositoryConfig();
+    if (!config) return;
+
+    const pendingGitGateway = (this.pendingGitGateway ??=
+      this.resolveGitGateway(config, true));
+    try {
+      await pendingGitGateway;
+      this.recordActivity();
+    } finally {
+      if (this.pendingGitGateway === pendingGitGateway) {
+        this.pendingGitGateway = null;
+      }
+    }
+  }
+
+  private async resolveGitGateway(
+    config: RepositoryConfig,
+    forceVerification = false,
+  ) {
     const currentSandbox = this.getSandboxState();
 
-    if (currentSandbox) {
-      console.info("Found stored sandbox state", {
+    if (
+      currentSandbox &&
+      !forceVerification &&
+      currentSandbox.verifiedAt &&
+      Date.now() - currentSandbox.verifiedAt <
+        GitRepository.SANDBOX_VERIFICATION_TTL_MS
+    ) {
+      console.info("Reusing stored Git sandbox route", {
         hostname: currentSandbox.hostname,
         sandboxId: currentSandbox.sandboxId,
       });
-      const sandbox = await this.getCachedArchilSandbox(
-        currentSandbox.sandboxId,
-      );
+      return currentSandbox.hostname;
+    }
 
+    if (currentSandbox) {
+      const sandbox = await this.getArchilSandbox(currentSandbox.sandboxId);
       if (sandbox) {
-        console.info("Reusing Git sandbox", {
-          hostname: currentSandbox.hostname,
-          sandboxId: currentSandbox.sandboxId,
-          status: sandbox.status,
+        this.setSandboxState({
+          ...currentSandbox,
+          verifiedAt: Date.now(),
         });
         return currentSandbox.hostname;
       }
 
-      console.warn("Stored Git sandbox no longer exists", {
-        sandboxId: currentSandbox.sandboxId,
-      });
+      this.ctx.storage.kv.delete(GitRepository.SANDBOX_STATE_KEY);
     }
 
+    return this.createGitSandbox(config);
+  }
+
+  private async createGitSandbox({
+    diskId,
+    mountToken,
+    repoName,
+    repoUsername,
+  }: RepositoryConfig) {
     console.info("Creating Git sandbox", { diskId, repoName, repoUsername });
     const sandbox = await this.archil.sandboxes.create(
       {
@@ -129,13 +172,16 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
       ARCHIL_DISK_ID: diskId,
       ARCHIL_MOUNT_TOKEN: mountToken,
       ARCHIL_REGION: this.env.ARCHIL_REGION,
-      ORIGIN_TOKEN: originToken,
+      ORIGIN_TOKEN: this.env.GIT_PASSWORD,
       REPO_NAME: repoName,
       REPO_USERNAME: repoUsername,
     });
 
-    this.setSandboxState({ sandboxId: sandbox.id, hostname });
-    this.cacheArchilSandbox(sandbox);
+    this.setSandboxState({
+      hostname,
+      sandboxId: sandbox.id,
+      verifiedAt: Date.now(),
+    });
     console.info("Git sandbox is ready", {
       hostname,
       sandboxId: sandbox.id,
@@ -161,7 +207,6 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
         await sandbox.delete();
       }
 
-      this.cachedArchilSandbox = null;
       await this.ctx.storage.deleteAll();
       console.info("Git repository state deleted", {
         sandboxId: sandboxState?.sandboxId,
@@ -262,35 +307,6 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     }
   }
 
-  private async getCachedArchilSandbox(sandboxId: string) {
-    const cached = this.cachedArchilSandbox;
-    if (
-      cached &&
-      cached.sandbox.id === sandboxId &&
-      cached.expiresAt > Date.now()
-    ) {
-      console.info("Archil sandbox cache hit", { sandboxId });
-      return cached.sandbox;
-    }
-
-    console.info("Archil sandbox cache miss", { sandboxId });
-    const sandbox = await this.getArchilSandbox(sandboxId);
-    if (sandbox) {
-      this.cacheArchilSandbox(sandbox);
-    } else {
-      this.cachedArchilSandbox = null;
-    }
-
-    return sandbox;
-  }
-
-  private cacheArchilSandbox(sandbox: Sandbox) {
-    this.cachedArchilSandbox = {
-      sandbox,
-      expiresAt: Date.now() + GitRepository.SANDBOX_CACHE_TTL_MS,
-    };
-  }
-
   private async getArchilSandbox(sandboxId: string) {
     try {
       const res = await this.archil.sandboxes.get(sandboxId);
@@ -324,7 +340,6 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     const sandbox = await this.getArchilSandbox(sandboxState.sandboxId);
 
     if (!sandbox) {
-      this.cachedArchilSandbox = null;
       this.ctx.storage.kv.delete(GitRepository.SANDBOX_STATE_KEY);
       console.warn("Idle Git sandbox no longer exists", {
         sandboxId: sandboxState.sandboxId,
@@ -345,7 +360,6 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
         status: sandbox.status,
       });
       await sandbox.stop();
-      this.cacheArchilSandbox(sandbox);
       console.info("Idle Git sandbox stopped", { sandboxId: sandbox.id });
       return;
     }
@@ -372,14 +386,30 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     );
   }
 
-  private async ping() {
-    const lastPing = new Date();
-    const alarmAt = lastPing.getTime() + this.idleTimeoutMs;
+  private readRepositoryConfig() {
+    const config = this.ctx.storage.kv.get<string | null | undefined>(
+      GitRepository.REPOSITORY_CONFIG_KEY,
+    );
+
+    return config ? RepositoryConfigSchema.parse(JSON.parse(config)) : null;
+  }
+
+  private recordActivity() {
+    const now = Date.now();
+    if (
+      now - this.getLastPing().getTime() <
+      GitRepository.ACTIVITY_WRITE_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    const lastPing = new Date(now);
+    const alarmAt = now + this.idleTimeoutMs;
     this.ctx.storage.kv.put(
       GitRepository.LAST_PING_KEY,
       lastPing.toISOString(),
     );
-    await this.ctx.storage.setAlarm(alarmAt);
+    this.ctx.waitUntil(this.ctx.storage.setAlarm(alarmAt));
     console.info("Git sandbox idle deadline updated", {
       alarmAt: new Date(alarmAt).toISOString(),
     });
@@ -389,7 +419,7 @@ export class GitRepository extends DurableObject<CloudflareBindings> {
     const ping =
       this.ctx.storage.kv.get<string | undefined | null>(
         GitRepository.LAST_PING_KEY,
-      ) ?? new Date().toISOString();
+      ) ?? new Date(0).toISOString();
 
     return new Date(ping);
   }
