@@ -13,6 +13,7 @@ if [ ! -f "$repository/HEAD" ] || [ ! -f "$repository/config" ]; then
 fi
 
 runuser -u www-data -- git -C "$repository" config http.receivepack true
+runuser -u www-data -- /usr/local/bin/configure-git-head "$repository"
 htpasswd -bc /etc/apache2/origin.htpasswd origin "$git_password"
 
 set +u
