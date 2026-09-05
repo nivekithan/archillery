@@ -9,15 +9,13 @@ RUN CGO_ENABLED=0 go build -o /git-metadata-service ./cmd/git-metadata-service
 
 FROM debian:bookworm-slim
 
-ARG ARCHIL_CLIENT_VERSION=0.8.30-1786758716
-
 LABEL org.opencontainers.image.source="https://github.com/nivekithan/archillery" \
       org.opencontainers.image.description="Git smart HTTP and metadata runtime for Archil sandboxes"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends apache2 ca-certificates curl git \
     && a2enmod cgi proxy proxy_http rewrite \
-    && ARCHIL_CLIENT_VERSION="$ARCHIL_CLIENT_VERSION" ARCHIL_SKIP_IAM_CHECK=1 \
+    && ARCHIL_SKIP_IAM_CHECK=1 \
        sh -c 'curl -fsSL https://archil.com/install | sh' \
     && rm -rf /var/lib/apt/lists/*
 

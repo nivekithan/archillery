@@ -49,7 +49,7 @@ trap 'exit 130' INT
 
 mkdir -p /var/lib/git
 echo "Mounting Archil disk"
-archil mount "$ARCHIL_DISK_ID" /var/lib/git --region "$ARCHIL_REGION"
+archil mount "$ARCHIL_DISK_ID" /var/lib/git --region "$ARCHIL_REGION" --force
 mounted=true
 
 chown www-data:www-data /var/lib/git
