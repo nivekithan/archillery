@@ -5,15 +5,13 @@ repository=/var/lib/git/repository.git
 git_password=${GIT_PASSWORD:-local-development-token}
 
 mkdir -p /var/lib/git
-chown www-data:www-data /var/lib/git
 
 if [ ! -f "$repository/HEAD" ] || [ ! -f "$repository/config" ]; then
   echo "Creating local Git repository"
+  chown www-data:www-data /var/lib/git
   runuser -u www-data -- git init --bare --initial-branch=main "$repository"
+  runuser -u www-data -- git --git-dir="$repository" config http.receivepack true
 fi
-
-runuser -u www-data -- git -C "$repository" config http.receivepack true
-runuser -u www-data -- /usr/local/bin/configure-git-head "$repository"
 htpasswd -bc /etc/apache2/origin.htpasswd origin "$git_password"
 
 set +u

@@ -2,6 +2,7 @@
 dist/
 
 # dev
+.local/
 .yarn/
 !.yarn/releases
 .vscode/*

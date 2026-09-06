@@ -21,8 +21,7 @@ RUN apt-get update \
 
 COPY apps/container/apache.conf /etc/apache2/sites-available/000-default.conf
 COPY apps/container/entrypoint.sh /usr/local/bin/git-container-entrypoint
-COPY apps/container/configure-git-head.sh /usr/local/bin/configure-git-head
 COPY --from=git-metadata-service-builder /git-metadata-service /usr/local/bin/git-metadata-service
 
-RUN chmod +x /usr/local/bin/git-container-entrypoint /usr/local/bin/configure-git-head \
+RUN chmod +x /usr/local/bin/git-container-entrypoint \
     && printf 'ok\n' > /var/www/html/ping

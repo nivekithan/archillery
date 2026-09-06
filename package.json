@@ -6,7 +6,8 @@
     "build": "turbo run build",
     "dev": "turbo run dev --filter=!@git-cloudflare/git-metadata-service",
     "deploy": "turbo run deploy",
-    "cf-typegen": "turbo run cf-typegen"
+    "cf-typegen": "turbo run cf-typegen",
+    "setup:typescript-go": "sh scripts/setup-typescript-go-repository.sh"
   },
   "devDependencies": {
     "turbo": "^2.10.11"

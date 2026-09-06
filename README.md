@@ -25,9 +25,21 @@ The local stack uses these ports:
 - Git gateway: `3002`
 - Worker: `8787`
 
-The gateway stores a bare repository in the `git-data` Docker volume. Push to
-any valid local repository route to populate it. The username is `nivekithan`
-and the password is `GIT_PASSWORD` from `apps/worker/.dev.vars`.
+The local stack uses a complete bare clone of the TypeScript Go compiler
+repository. Set it up before starting the stack:
+
+```sh
+pnpm setup:typescript-go
+```
+
+The setup command clones all branches, tags, and reachable history from
+Microsoft's `typescript-go` repository into
+`.local/git-data/repository.git`. The local gateway exposes that repository
+read-only for every valid repository route. The username is `nivekithan` and
+the password is `GIT_PASSWORD` from `apps/worker/.dev.vars`.
+
+With the default writable Docker volume, push to any valid local repository
+route to populate it:
 
 ```sh
 git push http://localhost:8787/nivekithan/archil-local.git main

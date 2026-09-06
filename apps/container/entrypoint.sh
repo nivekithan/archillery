@@ -61,7 +61,6 @@ if [ ! -f "$repository/HEAD" ]; then
   runuser -u www-data -- git --git-dir="$repository" config core.fsyncMethod fsync
   runuser -u www-data -- git --git-dir="$repository" config http.receivepack true
 fi
-runuser -u www-data -- /usr/local/bin/configure-git-head "$repository"
 
 htpasswd -bc /etc/apache2/origin.htpasswd origin "$ORIGIN_TOKEN"
 
