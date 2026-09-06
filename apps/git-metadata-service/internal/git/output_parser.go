@@ -89,24 +89,42 @@ func parseTreeEntries(output []byte, parentPath string) ([]TreeEntry, error) {
 	return entries, nil
 }
 
-func parseRecursivePaths(output []byte) ([]string, error) {
-	paths := make([]string, 0)
+type recursiveTreeEntry struct {
+	Path string
+	OID  string
+	Type string
+	Size *int64
+}
+
+func parseRecursiveTree(output []byte) ([]recursiveTreeEntry, error) {
+	entries := make([]recursiveTreeEntry, 0)
 	for record := range bytes.SplitSeq(output, []byte{0}) {
 		if len(record) == 0 {
 			continue
 		}
-		fields := bytes.SplitN(record, []byte{'\t'}, 2)
-		if len(fields) != 2 {
-			return nil, fmt.Errorf("parse recursive path: unexpected git output")
+		parts := bytes.SplitN(record, []byte{'\t'}, 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("parse recursive tree: unexpected git output")
 		}
-		switch string(fields[0]) {
-		case "tree":
-			paths = append(paths, string(fields[1])+"/")
-		case "blob":
-			paths = append(paths, string(fields[1]))
+		metadata := bytes.Fields(parts[0])
+		if len(metadata) != 4 {
+			return nil, fmt.Errorf("parse recursive tree: unexpected metadata")
 		}
+		entry := recursiveTreeEntry{
+			Path: string(parts[1]),
+			OID:  string(metadata[2]),
+			Type: string(metadata[1]),
+		}
+		if string(metadata[3]) != "-" {
+			size, err := strconv.ParseInt(string(metadata[3]), 10, 64)
+			if err != nil || size < 0 {
+				return nil, fmt.Errorf("parse recursive tree object size: %q", metadata[3])
+			}
+			entry.Size = &size
+		}
+		entries = append(entries, entry)
 	}
-	return paths, nil
+	return entries, nil
 }
 
 func treeEntryType(mode, objectType string) string {

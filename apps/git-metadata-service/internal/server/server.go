@@ -41,16 +41,30 @@ func New(config Config) http.Handler {
 	return mux
 }
 
-func (s *server) paths(request *http.Request) (git.RepositoryPaths, int, error) {
-	paths, err := s.repository.Paths(
+type pathsResponse struct {
+	Commit string   `json:"commit"`
+	Paths  []string `json:"paths"`
+}
+
+func (s *server) paths(request *http.Request) (pathsResponse, int, error) {
+	repositoryPaths, err := s.repository.Paths(
 		request.Context(),
 		request.URL.Query().Get("branch"),
 		request.URL.Query().Get("ref"),
 	)
 	if err != nil {
-		return git.RepositoryPaths{}, 0, err
+		return pathsResponse{}, 0, err
 	}
-	return paths, http.StatusOK, nil
+	paths := make([]string, 0, len(repositoryPaths.Entries))
+	for _, entry := range repositoryPaths.Entries {
+		switch entry.Type {
+		case "tree":
+			paths = append(paths, entry.Path+"/")
+		case "blob":
+			paths = append(paths, entry.Path)
+		}
+	}
+	return pathsResponse{Commit: repositoryPaths.Commit, Paths: paths}, http.StatusOK, nil
 }
 
 type repositoryResponse struct {

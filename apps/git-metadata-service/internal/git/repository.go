@@ -22,8 +22,17 @@ type Repository struct {
 	commands *commands
 }
 
+type Blob struct {
+	OID     string
+	Content []byte
+}
+
 func NewRepository(path string, timeout time.Duration) *Repository {
 	return &Repository{commands: newCommands(path, timeout)}
+}
+
+func (r *Repository) VisitBlobs(ctx context.Context, oids []string, visit func(Blob) error) error {
+	return r.commands.visitBlobs(ctx, oids, visit)
 }
 
 func (r *Repository) DefaultBranch(ctx context.Context) (string, error) {
@@ -204,8 +213,16 @@ func (r *Repository) Content(ctx context.Context, branch, commit, contentPath st
 }
 
 type RepositoryPaths struct {
-	Commit string   `json:"commit"`
-	Paths  []string `json:"paths"`
+	Commit   string
+	RootTree string
+	Entries  []RepositoryPath
+}
+
+type RepositoryPath struct {
+	Path string
+	OID  string
+	Type string
+	Size *int64
 }
 
 func (r *Repository) Paths(ctx context.Context, branch, commit string) (RepositoryPaths, error) {
@@ -217,11 +234,24 @@ func (r *Repository) Paths(ctx context.Context, branch, commit string) (Reposito
 	if err != nil {
 		return RepositoryPaths{}, fmt.Errorf("resolve path commit: %w", err)
 	}
-	paths, err := r.commands.recursivePaths(ctx, commitHash)
+	rootTree, err := r.commands.rootTree(ctx, commitHash)
+	if err != nil {
+		return RepositoryPaths{}, fmt.Errorf("resolve path tree: %w", err)
+	}
+	entries, err := r.commands.recursiveTree(ctx, commitHash)
 	if err != nil {
 		return RepositoryPaths{}, fmt.Errorf("read repository paths: %w", err)
 	}
-	return RepositoryPaths{Commit: commitHash, Paths: paths}, nil
+	paths := make([]RepositoryPath, 0, len(entries))
+	for _, entry := range entries {
+		paths = append(paths, RepositoryPath{
+			Path: entry.Path,
+			OID:  entry.OID,
+			Type: entry.Type,
+			Size: entry.Size,
+		})
+	}
+	return RepositoryPaths{Commit: commitHash, RootTree: rootTree, Entries: paths}, nil
 }
 
 func (r *Repository) revisionRef(ctx context.Context, branch, commit string) (string, error) {

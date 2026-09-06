@@ -1,9 +1,11 @@
 package git
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -87,21 +89,21 @@ func (c *commands) tree(ctx context.Context, treeSpec, parentPath string) ([]Tre
 	return parseTreeEntries(output, parentPath)
 }
 
-func (c *commands) recursivePaths(ctx context.Context, ref string) ([]string, error) {
+func (c *commands) recursiveTree(ctx context.Context, ref string) ([]recursiveTreeEntry, error) {
 	output, err := c.output(
 		ctx,
 		"ls-tree",
 		"-r",
 		"-t",
+		"-l",
 		"-z",
 		"--full-tree",
-		"--format=%(objecttype)%x09%(path)",
 		ref,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return parseRecursivePaths(output)
+	return parseRecursiveTree(output)
 }
 
 func (c *commands) resolveCommit(ctx context.Context, ref string) (string, error) {
@@ -112,8 +114,99 @@ func (c *commands) resolveCommit(ctx context.Context, ref string) (string, error
 	return strings.TrimSpace(string(output)), nil
 }
 
+func (c *commands) rootTree(ctx context.Context, commit string) (string, error) {
+	output, err := c.output(ctx, "rev-parse", "--verify", commit+"^{tree}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 func (c *commands) blob(ctx context.Context, blobSpec string) ([]byte, error) {
 	return c.output(ctx, "cat-file", "blob", blobSpec)
+}
+
+func (c *commands) visitBlobs(ctx context.Context, oids []string, visit func(Blob) error) error {
+	commandArgs := append([]string{"--git-dir", c.repositoryPath}, "cat-file", "--batch-command")
+	command := exec.CommandContext(ctx, "git", commandArgs...)
+	stdin, err := command.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("open git cat-file stdin: %w", err)
+	}
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("open git cat-file stdout: %w", err)
+	}
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("start git cat-file: %w", err)
+	}
+
+	reader := bufio.NewReader(stdout)
+	seen := make(map[string]struct{}, len(oids))
+	var visitErr error
+	for _, oid := range oids {
+		if _, ok := seen[oid]; ok {
+			continue
+		}
+		seen[oid] = struct{}{}
+		if !isCommitHash(oid) {
+			visitErr = fmt.Errorf("invalid blob object ID: %q", oid)
+			break
+		}
+		if _, err := fmt.Fprintf(stdin, "contents %s\n", oid); err != nil {
+			visitErr = fmt.Errorf("request blob %s: %w", oid, err)
+			break
+		}
+		header, err := reader.ReadString('\n')
+		if err != nil {
+			visitErr = fmt.Errorf("read blob %s header: %w", oid, err)
+			break
+		}
+		fields := strings.Fields(header)
+		if len(fields) == 2 && fields[1] == "missing" {
+			visitErr = fmt.Errorf("blob missing: %s", oid)
+			break
+		}
+		if len(fields) != 3 || fields[1] != "blob" || !strings.EqualFold(fields[0], oid) {
+			visitErr = fmt.Errorf("unexpected blob header for %s: %q", oid, strings.TrimSpace(header))
+			break
+		}
+		size, err := strconv.ParseInt(fields[2], 10, 64)
+		if err != nil || size < 0 || size > int64(int(^uint(0)>>1)) {
+			visitErr = fmt.Errorf("invalid blob size for %s: %q", oid, fields[2])
+			break
+		}
+		content := make([]byte, int(size))
+		if _, err := io.ReadFull(reader, content); err != nil {
+			visitErr = fmt.Errorf("read blob %s: %w", oid, err)
+			break
+		}
+		terminator, err := reader.ReadByte()
+		if err != nil || terminator != '\n' {
+			visitErr = fmt.Errorf("read blob %s terminator", oid)
+			break
+		}
+		if err := visit(Blob{OID: oid, Content: content}); err != nil {
+			visitErr = err
+			break
+		}
+	}
+
+	_ = stdin.Close()
+	if visitErr != nil {
+		_ = command.Process.Kill()
+	}
+	waitErr := command.Wait()
+	if visitErr != nil {
+		return visitErr
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if waitErr != nil {
+		return fmt.Errorf("git cat-file: %w", waitErr)
+	}
+	return nil
 }
 
 func (c *commands) objectType(ctx context.Context, objectSpec string) (string, error) {
