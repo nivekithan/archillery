@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	gitrepo "github.com/nivekithan/archillery/apps/git-metadata-service/internal/git"
 	gitUtils "github.com/nivekithan/archillery/apps/git-metadata-service/internal/git/utils"
@@ -27,9 +28,15 @@ type preparedBlob struct {
 	bigrams []uint16
 }
 
+// Bound transaction memory by both blob count and posting count.
+const (
+	maximumBatchBlobs    = 512
+	maximumBatchPostings = 500_000
+)
+
 type addBlobRequest struct {
-	blob     preparedBlob
-	response chan addBlobResult
+	blobs    []preparedBlob
+	response chan []addBlobResult
 }
 
 type addBlobResult struct {
@@ -53,17 +60,51 @@ func (engine *SearchEngine) indexBlobs(ctx context.Context, paths []gitrepo.Repo
 		}
 	}
 
+	pending := make([]preparedBlob, 0, maximumBatchBlobs)
+	postingCount := 0
+	flush := func() error {
+		if len(pending) == 0 {
+			return nil
+		}
+		response := make(chan []addBlobResult, 1)
+		select {
+		case engine.blobs <- addBlobRequest{blobs: pending, response: response}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		select {
+		case results := <-response:
+			for i, result := range results {
+				if result.err != nil {
+					return result.err
+				}
+				blobIDs[pending[i].oid] = result.id
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		pending = pending[:0]
+		postingCount = 0
+		return nil
+	}
+	add := func(blob preparedBlob) error {
+		pending = append(pending, blob)
+		postingCount += len(blob.bigrams)
+		if len(pending) >= maximumBatchBlobs || postingCount >= maximumBatchPostings {
+			return flush()
+		}
+		return nil
+	}
 	contentOIDs := make([]string, 0)
 	for _, oid := range oids {
 		if _, found := blobIDs[oid]; found {
 			continue
 		}
 		if sizes[oid] > MaxBlobSize {
-			id, err := engine.addBlob(ctx, preparedBlob{oid: oid, size: sizes[oid], flags: blobFlagOversized})
+			err := add(preparedBlob{oid: oid, size: sizes[oid], flags: blobFlagOversized})
 			if err != nil {
 				return nil, err
 			}
-			blobIDs[oid] = id
 		} else {
 			contentOIDs = append(contentOIDs, oid)
 		}
@@ -82,13 +123,15 @@ func (engine *SearchEngine) indexBlobs(ctx context.Context, paths []gitrepo.Repo
 		} else {
 			prepared.flags = blobFlagBinary
 		}
-		id, err := engine.addBlob(ctx, prepared)
+		err := add(prepared)
 		if err != nil {
 			return err
 		}
-		blobIDs[blob.OID] = id
 		return nil
 	}); err != nil {
+		return nil, err
+	}
+	if err := flush(); err != nil {
 		return nil, err
 	}
 	return blobIDs, nil
@@ -133,36 +176,43 @@ func (engine *SearchEngine) loadBlobIDs(oids []string) (map[string]uint32, error
 	return blobIDs, err
 }
 
-func (engine *SearchEngine) addBlob(ctx context.Context, blob preparedBlob) (uint32, error) {
-	response := make(chan addBlobResult, 1)
-	select {
-	case engine.blobs <- addBlobRequest{blob: blob, response: response}:
-	case <-ctx.Done():
-		return 0, ctx.Err()
-	}
-
-	select {
-	case result := <-response:
-		return result.id, result.err
-	case <-ctx.Done():
-		return 0, ctx.Err()
-	}
-}
-
 func (engine *SearchEngine) writeBlobs() {
 	defer close(engine.writerDone)
 	for request := range engine.blobs {
-		id, err := engine.writeBlob(request.blob)
-		request.response <- addBlobResult{id: id, err: err}
+		results := make([]addBlobResult, len(request.blobs))
+		err := engine.database.Update(func(tx *bbolt.Tx) error {
+			keys := make([]uint64, 0)
+			for i, blob := range request.blobs {
+				id, err := engine.writeBlob(tx, blob, &keys)
+				if err != nil {
+					return err
+				}
+				results[i].id = id
+			}
+			// Group adjacent posting keys so each B+tree page is updated together.
+			slices.Sort(keys)
+			postings := tx.Bucket(postingsBucket)
+			for _, key := range keys {
+				encoded := make([]byte, 8)
+				binary.BigEndian.PutUint64(encoded, key)
+				if err := postings.Put(encoded[2:], []byte{}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		for i := range results {
+			results[i].err = err
+		}
+		request.response <- results
 	}
 }
 
-func (engine *SearchEngine) writeBlob(blob preparedBlob) (uint32, error) {
+func (engine *SearchEngine) writeBlob(transaction *bbolt.Tx, blob preparedBlob, keys *[]uint64) (uint32, error) {
 	var blobID uint32
-	err := engine.database.Update(func(transaction *bbolt.Tx) error {
+	err := func() error {
 		byOID := transaction.Bucket(blobsByOIDBucket)
 		byID := transaction.Bucket(blobsByIDBucket)
-		postings := transaction.Bucket(postingsBucket)
 		oid, err := gitUtils.DecodeOID(blob.oid)
 		if err != nil {
 			return err
@@ -207,17 +257,12 @@ func (engine *SearchEngine) writeBlob(blob preparedBlob) (uint32, error) {
 			return err
 		}
 		for _, bigram := range blob.bigrams {
-			postingKey := make([]byte, 6)
-			binary.BigEndian.PutUint16(postingKey[:2], bigram)
-			binary.BigEndian.PutUint32(postingKey[2:], blobID)
-			if err := postings.Put(postingKey, []byte{}); err != nil {
-				return err
-			}
+			*keys = append(*keys, uint64(bigram)<<32|uint64(blobID))
 		}
 
 		updatedNext := make([]byte, 8)
 		binary.BigEndian.PutUint64(updatedNext, nextBlobID+1)
 		return metadata.Put(nextBlobIDKey, updatedNext)
-	})
+	}()
 	return blobID, err
 }
