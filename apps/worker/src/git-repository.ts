@@ -40,7 +40,9 @@ export class RepositoryContainer extends Container<CloudflareBindings> {
   }
 
   getRepositoryConfig(): RepositoryConfig | null {
-    return this.ctx.storage.kv.get<RepositoryConfig>("REPOSITORY_CONFIG") ?? null;
+    return (
+      this.ctx.storage.kv.get<RepositoryConfig>("REPOSITORY_CONFIG") ?? null
+    );
   }
 
   async prewarm() {
@@ -63,8 +65,17 @@ export class RepositoryContainer extends Container<CloudflareBindings> {
   async deleteRepository() {
     return this.ctx.blockConcurrencyWhile(async () => {
       await this.destroy();
-      await this.ctx.storage.deleteAll();
+      this.ctx.storage.kv.delete("REPOSITORY_CONFIG");
+      await this.ctx.storage.deleteAlarm();
       return { sandboxId: null };
     });
+  }
+
+  async alarm() {
+    if (!this.getRepositoryConfig()) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    return super.alarm();
   }
 }

@@ -1,4 +1,4 @@
-package search
+package bbolt
 
 import (
 	"bytes"
@@ -11,9 +11,7 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-var (
-	ErrRevisionNotFound = errors.New("revision manifest not found")
-)
+var ErrRevisionNotFound = errors.New("revision manifest not found")
 
 type RevisionFile struct {
 	Path   string
@@ -24,7 +22,7 @@ type RevisionManifest struct {
 	Files []RevisionFile
 }
 
-func (engine *SearchEngine) getRevisionManifest(rootTreeOID string) (RevisionManifest, error) {
+func (engine *Engine) getRevisionManifest(rootTreeOID string) (RevisionManifest, error) {
 	key, err := gitUtils.DecodeOID(rootTreeOID)
 	if err != nil {
 		return RevisionManifest{}, err
@@ -45,7 +43,7 @@ func (engine *SearchEngine) getRevisionManifest(rootTreeOID string) (RevisionMan
 	return decodeRevisionManifest(encoded)
 }
 
-func (engine *SearchEngine) putRevisionManifest(rootTreeOID string, manifest RevisionManifest) error {
+func (engine *Engine) putRevisionManifest(rootTreeOID string, manifest RevisionManifest) error {
 	key, err := gitUtils.DecodeOID(rootTreeOID)
 	if err != nil {
 		return err

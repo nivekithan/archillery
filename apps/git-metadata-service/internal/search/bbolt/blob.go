@@ -1,4 +1,4 @@
-package search
+package bbolt
 
 import (
 	"context"
@@ -10,13 +10,14 @@ import (
 
 	gitrepo "github.com/nivekithan/archillery/apps/git-metadata-service/internal/git"
 	gitUtils "github.com/nivekithan/archillery/apps/git-metadata-service/internal/git/utils"
+	"github.com/nivekithan/archillery/apps/git-metadata-service/internal/search/bigram"
+	"github.com/nivekithan/archillery/apps/git-metadata-service/internal/search/content"
 	"go.etcd.io/bbolt"
 )
 
 const (
-	MaxBlobSize = int64(2 << 20)
-
-	blobFlagSearchable = uint32(1 << iota)
+	// Preserve the persisted flag bits; bit zero is unused.
+	blobFlagSearchable = uint32(1 << (iota + 1))
 	blobFlagBinary
 	blobFlagOversized
 )
@@ -44,7 +45,7 @@ type addBlobResult struct {
 	err error
 }
 
-func (engine *SearchEngine) indexBlobs(ctx context.Context, paths []gitrepo.RepositoryPath) (map[string]uint32, error) {
+func (engine *Engine) indexBlobs(ctx context.Context, paths []gitrepo.RepositoryPath) (map[string]uint32, error) {
 	oids := blobOIDs(paths)
 	blobIDs, err := engine.loadBlobIDs(oids)
 	if err != nil {
@@ -100,7 +101,7 @@ func (engine *SearchEngine) indexBlobs(ctx context.Context, paths []gitrepo.Repo
 		if _, found := blobIDs[oid]; found {
 			continue
 		}
-		if sizes[oid] > MaxBlobSize {
+		if sizes[oid] > content.MaxBlobSize {
 			err := add(preparedBlob{oid: oid, size: sizes[oid], flags: blobFlagOversized})
 			if err != nil {
 				return nil, err
@@ -117,9 +118,9 @@ func (engine *SearchEngine) indexBlobs(ctx context.Context, paths []gitrepo.Repo
 		}
 
 		prepared := preparedBlob{oid: blob.OID, size: expectedSize}
-		if searchableContent(blob.Content) {
+		if content.Searchable(blob.Content) {
 			prepared.flags = blobFlagSearchable
-			prepared.bigrams = normalizedBigrams(blob.Content)
+			prepared.bigrams = bigram.Normalized(blob.Content)
 		} else {
 			prepared.flags = blobFlagBinary
 		}
@@ -153,7 +154,7 @@ func blobOIDs(paths []gitrepo.RepositoryPath) []string {
 	return oids
 }
 
-func (engine *SearchEngine) loadBlobIDs(oids []string) (map[string]uint32, error) {
+func (engine *Engine) loadBlobIDs(oids []string) (map[string]uint32, error) {
 	blobIDs := make(map[string]uint32, len(oids))
 	err := engine.database.View(func(transaction *bbolt.Tx) error {
 		byOID := transaction.Bucket(blobsByOIDBucket)
@@ -176,7 +177,7 @@ func (engine *SearchEngine) loadBlobIDs(oids []string) (map[string]uint32, error
 	return blobIDs, err
 }
 
-func (engine *SearchEngine) writeBlobs() {
+func (engine *Engine) writeBlobs() {
 	defer close(engine.writerDone)
 	for request := range engine.blobs {
 		results := make([]addBlobResult, len(request.blobs))
@@ -208,7 +209,7 @@ func (engine *SearchEngine) writeBlobs() {
 	}
 }
 
-func (engine *SearchEngine) writeBlob(transaction *bbolt.Tx, blob preparedBlob, keys *[]uint64) (uint32, error) {
+func (engine *Engine) writeBlob(transaction *bbolt.Tx, blob preparedBlob, keys *[]uint64) (uint32, error) {
 	var blobID uint32
 	err := func() error {
 		byOID := transaction.Bucket(blobsByOIDBucket)

@@ -1,11 +1,8 @@
-package search
+package bigram
 
-import (
-	"bytes"
-	"unicode/utf8"
-)
+import "unicode/utf8"
 
-func normalizedBigrams(content []byte) []uint16 {
+func Normalized(content []byte) []uint16 {
 	normalized := make([]byte, 0, len(content))
 	for _, value := range content {
 		if value >= 'A' && value <= 'Z' {
@@ -50,8 +47,4 @@ func indexableBigram(left, right byte) bool {
 
 func isHorizontalWhitespace(value byte) bool {
 	return value == ' ' || value == '\t' || value == '\v' || value == '\f'
-}
-
-func searchableContent(content []byte) bool {
-	return bytes.IndexByte(content, 0) < 0 && utf8.Valid(content)
 }
