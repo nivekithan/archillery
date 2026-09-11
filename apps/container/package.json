@@ -1,7 +1,4 @@
 {
   "name": "@git-cloudflare/container",
-  "private": true,
-  "scripts": {
-    "dev": "docker compose --project-directory ../.. --env-file ../worker/.dev.vars watch"
-  }
+  "private": true
 }

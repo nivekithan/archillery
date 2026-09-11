@@ -1,28 +1,22 @@
 export async function requestGitGateway({
   request,
-  gitGatewayUrl,
-  originToken,
+  gatewayFetch,
 }: {
   request: Request;
-  gitGatewayUrl: string;
-  originToken: string;
+  gatewayFetch: (request: Request) => Promise<Response>;
 }): Promise<Response> {
   const headers = new Headers(request.headers);
   headers.delete("host");
-  headers.set("authorization", `Basic ${btoa(`origin:${originToken}`)}`);
+  headers.delete("authorization");
 
   const url = new URL(request.url);
-  const gatewayUrl = new URL(gitGatewayUrl);
-  url.protocol = gatewayUrl.protocol;
-  url.host = gatewayUrl.host;
 
   console.info("Requesting Git gateway", {
-    gitGatewayUrl,
     method: request.method,
     path: url.pathname,
   });
 
-  const response = await fetch(
+  const response = await gatewayFetch(
     new Request(url, {
       body: request.body,
       headers,
@@ -31,7 +25,6 @@ export async function requestGitGateway({
     }),
   );
   console.info("Git gateway responded", {
-    gitGatewayUrl,
     method: request.method,
     path: url.pathname,
     status: response.status,

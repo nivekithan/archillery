@@ -14,7 +14,6 @@
   "vars": {
     "GIT_USERNAME": "nivekithan",
     "ARCHIL_REGION": "aws-us-east-1",
-    "ARCHIL_SANDBOX_IMAGE": "ghcr.io/nivekithan/archillery@sha256:40902927766152311cf2a6436b2b177e335a04a0dafb9bdf72079d1f15a62c03",
     "GIT_IDLE_TIMEOUT_SECONDS": 900,
   },
   "secrets": {
@@ -36,11 +35,21 @@
       },
     ],
   },
+  "containers": [
+    {
+      "class_name": "RepositoryContainer",
+      "image": "../container/Dockerfile",
+      "name": "git-cloudflare-repository-runtime",
+      "image_build_context": "../..",
+      "instance_type": { "vcpu": 2, "memory_mib": 6144, "disk_mb": 12000 },
+      "max_instances": 10,
+    },
+  ],
   "durable_objects": {
     "bindings": [
       {
         "name": "GIT_REPOSITORY",
-        "class_name": "GitRepository",
+        "class_name": "RepositoryContainer",
       },
     ],
   },
@@ -63,6 +72,14 @@
       "tag": "v4",
       "new_sqlite_classes": ["GitRepository"],
       "deleted_classes": ["GitContainer"],
+    },
+    { "tag": "v5", "new_sqlite_classes": ["RepositoryContainer"] },
+    { "tag": "v6", "deleted_classes": ["RepositoryContainer"] },
+    {
+      "tag": "v7",
+      "renamed_classes": [
+        { "from": "GitRepository", "to": "RepositoryContainer" },
+      ],
     },
   ],
 }

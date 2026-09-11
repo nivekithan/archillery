@@ -4,12 +4,13 @@
   "type": "module",
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir dist",
-    "dev": "wrangler dev --var GIT_GATEWAY_URL:http://127.0.0.1:3002",
+    "dev": "wrangler dev",
     "dev:remote": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
     "disk": "^1.0.0",
     "hono": "^4.13.3",
     "zod": "^4.4.3"

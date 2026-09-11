@@ -4,7 +4,6 @@ set -eu
 : "${ARCHIL_DISK_ID:?ARCHIL_DISK_ID is required}"
 : "${ARCHIL_MOUNT_TOKEN:?ARCHIL_MOUNT_TOKEN is required}"
 : "${ARCHIL_REGION:?ARCHIL_REGION is required}"
-: "${ORIGIN_TOKEN:?ORIGIN_TOKEN is required}"
 
 repository=/var/lib/git/repository.git
 mounted=false
@@ -62,7 +61,6 @@ if [ ! -f "$repository/HEAD" ]; then
   runuser -u www-data -- git --git-dir="$repository" config http.receivepack true
 fi
 
-htpasswd -bc /etc/apache2/origin.htpasswd origin "$ORIGIN_TOKEN"
 
 echo "Starting Git metadata service on port 3001"
 runuser -u www-data -- env \

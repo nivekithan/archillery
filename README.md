@@ -12,8 +12,9 @@ I am working on fixing all of these things and maybe even build a nicer web ui i
 
 ## Local development
 
-Local development runs Git smart HTTP and the metadata API without creating an
-Archil sandbox. Start the full stack with Turbo:
+Local development uses Wrangler's container runtime and the same Dockerfile,
+Apache configuration, and entrypoint as production. Docker must be running.
+Set `ARCHIL_API_KEY` and `GIT_PASSWORD` in `apps/worker/.dev.vars`, then start:
 
 ```sh
 pnpm dev
@@ -22,11 +23,13 @@ pnpm dev
 The local stack uses these ports:
 
 - Web application: `3000`
-- Git gateway: `3002`
 - Worker: `8787`
 
-The local stack uses a complete bare clone of the TypeScript Go compiler
-repository. Set it up before starting the stack:
+Create a repository through the application before pushing to it. Local
+repository data is stored on an Archil disk; the local Durable Object state is
+separate from production.
+
+To keep a complete local bare copy of TypeScript Go for development tools:
 
 ```sh
 pnpm setup:typescript-go
@@ -34,19 +37,5 @@ pnpm setup:typescript-go
 
 The setup command clones all branches, tags, and reachable history from
 Microsoft's `typescript-go` repository into
-`.local/git-data/repository.git`. The local gateway exposes that repository
-read-only for every valid repository route. The username is `nivekithan` and
-the password is `GIT_PASSWORD` from `apps/worker/.dev.vars`.
-
-With the default writable Docker volume, push to any valid local repository
-route to populate it:
-
-```sh
-git push http://localhost:8787/nivekithan/archil-local.git main
-```
-
-Compose Watch restarts the metadata service when its Go source changes,
-restarts Apache when its local configuration changes, and rebuilds the gateway
-when the Dockerfile changes. Repository creation and deletion endpoints return
-`501` in local gateway mode because the local stack provides one persistent
-development repository.
+`.local/git-data/repository.git`. This copy is not automatically mounted into
+Wrangler's containers.
