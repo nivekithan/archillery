@@ -2,6 +2,7 @@ package search
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,7 +59,9 @@ func initializeDatabase(database *bbolt.DB) error {
 			if err := metadata.Put(formatVersionKey, formatVersionValue); err != nil {
 				return err
 			}
-			return metadata.Put(nextBlobIDKey, []byte{0, 0, 0, 1})
+			nextBlobID := make([]byte, 8)
+			binary.BigEndian.PutUint64(nextBlobID, 1)
+			return metadata.Put(nextBlobIDKey, nextBlobID)
 		}
 		if !bytes.Equal(version, formatVersionValue) {
 			return fmt.Errorf("unsupported search database format version %x", version)

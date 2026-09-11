@@ -238,10 +238,22 @@ func (r *Repository) Paths(ctx context.Context, branch, commit string) (Reposito
 	if err != nil {
 		return RepositoryPaths{}, fmt.Errorf("resolve path tree: %w", err)
 	}
-	entries, err := r.commands.recursiveTree(ctx, commitHash)
+	paths, err := r.TreePaths(ctx, rootTree)
 	if err != nil {
 		return RepositoryPaths{}, fmt.Errorf("read repository paths: %w", err)
 	}
+	return RepositoryPaths{Commit: commitHash, RootTree: rootTree, Entries: paths}, nil
+}
+
+func (r *Repository) TreePaths(ctx context.Context, rootTreeOID string) ([]RepositoryPath, error) {
+	if !isCommitHash(rootTreeOID) {
+		return nil, fmt.Errorf("%w: invalid root tree object ID", ErrInvalidRef)
+	}
+	entries, err := r.commands.recursiveTree(ctx, rootTreeOID)
+	if err != nil {
+		return nil, fmt.Errorf("read root tree: %w", err)
+	}
+
 	paths := make([]RepositoryPath, 0, len(entries))
 	for _, entry := range entries {
 		paths = append(paths, RepositoryPath{
@@ -251,7 +263,7 @@ func (r *Repository) Paths(ctx context.Context, branch, commit string) (Reposito
 			Size: entry.Size,
 		})
 	}
-	return RepositoryPaths{Commit: commitHash, RootTree: rootTree, Entries: paths}, nil
+	return paths, nil
 }
 
 func (r *Repository) revisionRef(ctx context.Context, branch, commit string) (string, error) {
