@@ -40,6 +40,7 @@ export class RepositoryContainer extends Container<CloudflareBindings> {
   }
 
   getRepositoryConfig(): RepositoryConfig | null {
+    if (this.ctx.storage.kv.get<boolean>("REPOSITORY_DISABLED")) return null;
     return (
       this.ctx.storage.kv.get<RepositoryConfig>("REPOSITORY_CONFIG") ?? null
     );
@@ -68,6 +69,15 @@ export class RepositoryContainer extends Container<CloudflareBindings> {
       this.ctx.storage.kv.delete("REPOSITORY_CONFIG");
       await this.ctx.storage.deleteAlarm();
       return { sandboxId: null };
+    });
+  }
+
+  async disableRepository() {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      this.ctx.storage.kv.put("REPOSITORY_DISABLED", true);
+      await this.destroy();
+      await this.ctx.storage.deleteAlarm();
+      return { disabled: true };
     });
   }
 

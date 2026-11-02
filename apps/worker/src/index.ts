@@ -53,6 +53,14 @@ app.post("/api/repositories", requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+app.post("/api/repositories/:username/:repo/disable", requireAuth, async (c) => {
+  const { repo, username } = RepoNameSchema.parse(c.req.param());
+  const repository = c.env.GIT_REPOSITORY.getByName(
+    getRepoKey({ repo, username }),
+  );
+  return c.json(await repository.disableRepository());
+});
+
 app.delete("/api/repositories/:username/:repo", requireAuth, async (c) => {
   const { repo, username } = RepoNameSchema.parse(c.req.param());
 
